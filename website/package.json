@@ -1,0 +1,24 @@
+{
+  "name": "scribe-website",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "description": "Marketing and docs site for NanthAi Scribe (scribe.nanthai.tech)",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "check": "astro check",
+    "shots": "node scripts/check-layout.mjs",
+    "check:layout": "node scripts/check-layout.mjs"
+  },
+  "dependencies": {
+    "@astrojs/sitemap": "^3.4.0",
+    "astro": "^5.12.0"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.10",
+    "playwright": "1.60.0",
+    "typescript": "^5.9.3"
+  }
+}

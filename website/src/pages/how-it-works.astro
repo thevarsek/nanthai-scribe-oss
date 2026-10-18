@@ -1,0 +1,65 @@
+---
+import Base from '@/layouts/Base.astro';
+import Scene from '@/components/Scene.astro';
+import StoreButtons from '@/components/StoreButtons.astro';
+const arrow = '<svg viewBox="0 0 24 24"><path d="M7 17L17 7M9 7h8v8"/></svg>';
+---
+<Base title='How it works' description='From your voice to clean text: hold-to-talk on the Mac, Refine, the iPhone keyboard, meetings and privacy, step by step.'>
+
+<section class="band hero inner"><div class="container hero-copy"><h1 class="display">Hold.<br><em>Talk. Let go.</em></h1><p class="lede">Everything Scribe does, step by step. No window to open, nothing to copy afterwards.</p></div></section>
+
+<section class="band alt"><div class="container grid-2">
+  <div data-reveal>
+    <h2>Hold a key and talk</h2>
+    <p>Click into any text field: Mail, Slack, a browser, a terminal. Hold your talk shortcut. A small floating bar shows your words as they arrive. Let go and the text is typed at your cursor; your clipboard is put back.</p>
+    <table class="chords"><tbody>
+      <tr><th scope="row"><kbd>Hold the shortcut</kbd></th><td>Dictate. Text is typed when you let go.</td></tr>
+      <tr><th scope="row"><kbd>+ Shift</kbd></th><td>Hands-free. Return finishes, Esc cancels.</td></tr>
+      <tr><th scope="row"><kbd>+ ⌘</kbd></th><td>Refine. Clean writing in the tone you chose.</td></tr>
+      <tr><th scope="row">Select text, then <kbd>+ ⌘</kbd></th><td>Edit the selection. Say what to change.</td></tr>
+    </tbody></table>
+  </div>
+  <div class="stage tight" data-reveal><Scene kind="dictate" max={1} /></div>
+</div></section>
+
+<section class="band"><div class="container grid-2">
+  <div data-reveal>
+    <h2>From rambling to clear</h2>
+    <p>Add ⌘ during the hold. When you let go, the bar reads "Refining…" and what lands is clean writing in the tone you chose: Natural, Casual, Formal or Code. If the rewrite fails or takes more than 20 seconds, the cleaned transcript is inserted instead. Nothing is lost.</p>
+    <p>Select text first and your dictation becomes an instruction: "shorter", "make it a list", "translate to French".</p>
+  </div>
+  <div class="stage tight" data-reveal><div class="before-after"><p class="label">You said</p><p class="raw">ok so basically the meeting is moved, it's moved to thursday at ten, um can everyone confirm</p><p class="label">Formal</p><p class="clean">The meeting has been moved to Thursday at 10:00. Please confirm that you can attend.</p><p class="label">Casual</p><p class="clean">Meeting's moved to Thursday at 10. Can everyone confirm?</p></div></div>
+</div></section>
+
+<section class="band alt"><div class="container grid-2">
+  <div data-reveal>
+    <h2>On iPhone, type or talk</h2>
+    <p>Scribe is a full keyboard laid out like Apple's. Type as usual; when speaking is quicker, tap the Scribe key, then Talk. Your words appear in the keyboard as you speak; tap Done and the whole sentence is inserted into the app you are in.</p>
+    <p>iOS keyboards can't use the microphone, so the first Talk opens Scribe for a moment to start listening and you swipe back. After that the mic stays ready for five minutes (you choose: off, 1, 5 or 15), so the next Talk is instant. A Live Activity shows the countdown and an End button.</p>
+    <p class="more"><a href="/features">Swipe typing, autocorrect and the rest of the keyboard <Fragment set:html={arrow} /></a></p>
+  </div>
+  <div class="handoff-stage" data-reveal><Scene kind="phone" max={0.95} /></div>
+</div></section>
+
+<section class="band"><div class="container grid-2">
+  <div data-reveal>
+    <h2>Nothing leaves the device</h2>
+    <p>Speech recognition runs on your Mac or iPhone with Apple's on-device engine. Refine runs with Apple Intelligence, or with the optional Gemma 4 model running locally. The only network use is model downloads you start and Mac update checks you turn on.</p>
+    <p class="more"><a href="/privacy">How Scribe handles your data <Fragment set:html={arrow} /></a></p>
+  </div>
+  <div class="stage tight" data-reveal><Scene kind="privacy" max={1} /></div>
+</div></section>
+
+<section class="band alt"><div class="container grid-2">
+  <div data-reveal>
+    <h2>A call becomes a transcript and a summary</h2>
+    <p>Choose Record meeting during any call. Scribe captures your microphone and the call's audio, transcribes both, labels turns as You and Speaker 1, 2, 3, and writes a short summary with action items. Rename speakers, add notes, play the audio back, copy or export.</p>
+    <p>On iPhone, record in-person meetings with the microphone, up to four hours. iOS does not let apps capture other apps' call audio. Always ask before you record.</p>
+    <p class="more"><a href="/docs/meetings">Meetings on Mac <Fragment set:html={arrow} /></a></p>
+  </div>
+  <div class="stage tight" data-reveal><Scene kind="meeting" max={1} /></div>
+</div></section>
+
+<section class="band final"><div class="container final-in"><h2 class="display" data-reveal>Try it<br><em>in a minute.</em></h2><div data-reveal><p>Both apps are free. Permissions are explained on first launch.</p><StoreButtons /></div></div></section>
+
+</Base>

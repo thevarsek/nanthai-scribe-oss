@@ -1,0 +1,6 @@
+# Copy to Config.local.mk for local signing. Environment or make arguments also work.
+# Without these settings, make app detects a Developer ID or uses ad-hoc signing.
+# TEAM_ID filters identity detection when several teams are installed.
+# TEAM_ID = YOUR_TEAM_ID
+# SIGN_ID = Developer ID Application: Your Organisation (YOUR_TEAM_ID)
+# NOTARY_PROFILE = your-keychain-profile

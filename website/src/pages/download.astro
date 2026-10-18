@@ -1,0 +1,31 @@
+---
+import Base from '@/layouts/Base.astro';
+import StoreButtons from '@/components/StoreButtons.astro';
+import { site } from '@/lib/site';
+const faq = [
+  ['Is Scribe really free?', 'Yes. No subscription, no credits, no paid tier. Everything runs on your device, so there is no server cost to pass on.'],
+  ['Does my voice go to a server?', 'No. Speech recognition and rewriting run on your Mac or iPhone. The only network use is model downloads you start and Mac update checks you turn on.'],
+  ['Where do I get the Mac app?', 'From this page, as a free DMG, once Scribe is out. Drag Scribe to Applications, open it, grant Accessibility and Microphone access, then pick your talk shortcut.'],
+  ['How do Mac updates work?', 'Choose Check for Updates… in the app menu. Automatic checks are off by default; turn them on in Settings › General. When on, Scribe asks scribe.nanthai.tech once a day and sends nothing else.'],
+  ['Why does Scribe open briefly when I tap Talk on iPhone?', 'iOS keyboards can\'t record audio, so the app starts the microphone and you swipe back. After that, the mic stays ready for a few minutes and Talk is instant.'],
+];
+---
+<Base title='Download' description='Get free on-device dictation: a free DMG for Mac and the App Store for iPhone. Requirements, setup and optional model downloads.'>
+
+<section class="band hero inner"><div class="container hero-copy"><h1 class="display">Get<br><em>Scribe.</em></h1><p class="lede">Free on Mac and iPhone. A direct download for Mac; the App Store for iPhone. No account, no subscription.{!site.launched && ' Both are coming soon; the requirements and setup below are final.'}</p></div></section>
+
+<section class="band alt"><div class="container grid-2 align-start">
+  <article class="dl" id="mac" data-reveal><h2>Mac</h2><p class="muted">Free, downloaded from this website.</p><StoreButtons platform="mac" /><ul class="checks"><li>Lives in the menu bar; no Dock icon until you open the Library.</li><li>Drag Scribe to Applications, open it, then grant Accessibility and Microphone access.</li><li>Choose a talk shortcut: a single modifier, a combination, or a foot pedal sending F13–F20.</li><li><a href="/docs/getting-started-mac">Set up Scribe on Mac →</a></li></ul></article>
+  <article class="dl" id="iphone" data-reveal><h2>iPhone and iPad</h2><p class="muted">iOS 26. One app with a keyboard inside it.</p><StoreButtons platform="iphone" /><ul class="checks"><li>Add the Scribe keyboard in Settings and allow Full Access. The app's checklist walks you through it.</li><li>Tap Talk in any app. Or start from the Action Button, Control Center or Back Tap.</li><li><a href="/docs/getting-started-iphone">Set up the keyboard →</a></li></ul></article>
+</div></section>
+
+<section class="band" id="models"><div class="container"><div class="sec-head" data-reveal><h2>Nothing downloads on its own</h2><p>Scribe works out of the box with Apple's speech recognition and Apple Intelligence. Three optional models extend it, each downloaded only when you press its button, and each deletable from the same place.</p></div>
+<div class="table-wrap" data-reveal><table class="compare"><thead><tr><th scope="col">Model</th><th scope="col">Size</th><th scope="col">What it adds</th><th scope="col">Credit</th></tr></thead><tbody>
+<tr><th scope="row">Parakeet language pack</th><td>{site.models.parakeet.size}</td><td>Speech recognition for 25 European languages, including ones Apple's on-device speech doesn't cover. Settings › Languages.</td><td class="muted">{site.models.parakeet.credit}</td></tr>
+<tr><th scope="row">Gemma 4</th><td>{site.models.gemma.size}</td><td>A rewrite engine for Refine on devices without Apple Intelligence, and for long meeting summaries. Settings › Refine.</td><td class="muted">{site.models.gemma.credit}</td></tr>
+<tr><th scope="row">Meeting speakers</th><td>{site.models.diarizer.size}</td><td>Tells speakers apart in meetings on Mac and iPhone. Settings › Meetings, or the sheet before a recording.</td><td class="muted">FluidAudio speaker diarization</td></tr>
+</tbody></table></div></div></section>
+
+<section class="band alt"><div class="container narrow"><div class="sec-head" data-reveal><h2>Before you install</h2></div><div class="faq" data-reveal>{faq.map(([q, a]) => <details><summary><h3>{q}</h3></summary><p>{a}</p></details>)}</div></div></section>
+
+</Base>

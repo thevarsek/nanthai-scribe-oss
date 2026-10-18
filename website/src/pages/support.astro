@@ -1,0 +1,22 @@
+---
+import Base from '@/layouts/Base.astro';
+import { site } from '@/lib/site';
+const questions = [
+  ['Is Scribe free?', 'Yes. No subscription, credits or paid tier. Dictation and rewriting run on your device.'],
+  ['Can I use it offline?', 'Yes, once the speech assets and any optional models you use have been downloaded. Scribe sends no audio or text to a server.'],
+  ['What devices does it need?', 'macOS 26 on Apple silicon, or iOS 26 on iPhone and iPad. Refine needs Apple Intelligence on the device, or the optional Gemma 4 model in the app.'],
+  ['Why does Talk briefly open the iPhone app?', 'iOS keyboards cannot record audio. Scribe starts the microphone in the app, then you swipe back. The mic then stays ready between takes so the next Talk is instant.'],
+  ['Why does the keyboard need Full Access?', 'It lets the keyboard exchange dictation text, Dictionary and settings with the Scribe app through a shared container on your phone. The keyboard makes no network requests.'],
+  ['The Mac shortcut does nothing. What should I check?', 'Accessibility. Scribe needs it to notice your shortcut and paste the result. Turn it on in System Settings › Privacy & Security › Accessibility; no relaunch is needed. Then check which shortcut is set in Settings › General.'],
+  ['How do Mac updates work?', 'Choose Check for Updates… in the app menu. Automatic checks are off by default; turn them on in Settings › General. When on, Scribe asks scribe.nanthai.tech once a day and sends nothing else.'],
+  ['Can I use a foot pedal?', 'Yes. Set it to send F13–F20, then press it in Settings › General › Talk shortcut › Change…. Hold to talk, release to insert.'],
+  ['Can I record a meeting on iPhone?', 'Yes, with the microphone, for up to four hours. iOS does not let Scribe capture other apps\' call audio. On Mac, meetings capture the microphone and the call audio.'],
+  ['Do my notes or Dictionary sync?', 'No. Each device keeps its own Library, Dictionary and settings. Export Library… makes a backup file you can import on another device.'],
+  ['I deleted a note by mistake.', 'Open Recently Deleted at the bottom of the Library and tap Restore. Deleted notes and meetings stay there for 30 days.'],
+];
+---
+<Base title="Support" description="Scribe FAQ, troubleshooting and direct help at support@nanthai.tech. Setup, permissions, models, meetings and the iPhone keyboard.">
+<section class="band hero inner"><div class="container hero-copy"><h1 class="display">A little<br><em>help.</em></h1><p class="lede">Answers to the usual questions, and a person at the other end when you need one.</p></div></section>
+<section class="band alt"><div class="container narrow"><div class="sec-head" data-reveal><h2>Good questions</h2></div><div class="faq" data-reveal>{questions.map(([q, a]) => <details><summary><h3>{q}</h3></summary><p>{a}</p></details>)}</div><p class="more"><a href="/docs/troubleshooting">Open the troubleshooting guide →</a></p></div></section>
+<section class="band"><div class="container narrow" data-reveal><h2>Talk to us</h2><p class="lede">For setup help, a bug or a privacy question:</p><a class="contact" href={'mailto:' + site.contactEmail}>{site.contactEmail}</a><p class="muted">For a bug, your device, OS version and the steps that led to it help us reproduce it. Share only the text you want us to see.</p></div></section>
+</Base>

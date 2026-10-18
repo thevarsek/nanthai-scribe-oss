@@ -1,0 +1,53 @@
+---
+import * as drawings from '@/lib/scene-markup.mjs';
+import '@/styles/scenes.css';
+import '@/styles/story.css';
+interface Props { kind: 'story' | 'dictate' | 'phone' | 'privacy' | 'meeting' | 'swipe' | 'tones' | 'learn' | 'transcribe' | 'shortcut'; max?: number; }
+const { kind, max = 1 } = Astro.props;
+const drawing = { dictate: drawings.sceneDictate, phone: drawings.scenePhone, privacy: drawings.scenePrivacy, meeting: drawings.sceneMeeting, swipe: drawings.sceneSwipe, tones: drawings.sceneTones, learn: drawings.sceneLearn, transcribe: drawings.sceneTranscribe, shortcut: drawings.sceneShortcut };
+let markup = '';
+if (kind !== 'story') {
+  markup = drawing[kind](max);
+  const w = Number(markup.match(/data-w="(\d+)"/)?.[1]);
+  const h = Number(markup.match(/data-h="(\d+)"/)?.[1]);
+  markup = markup.replace('class="scene', `style="max-width:${w * max}px;aspect-ratio:${w}/${h};margin-inline:auto" class="scene`);
+  markup = markup.replace(/Hold right ⌥ and talk/g, 'Hold your shortcut and talk');
+  // Render the finished story at build time: reduced motion and no-JS need no timeline.
+  // The phone and callout drawings are already written in their final state; their timelines reset them.
+  const clean = 'Can you send me the sales report by Friday?';
+  if (kind === 'dictate') {
+    markup = markup.replace('<span class="sc-typed"></span>', `<span class="sc-typed">${clean}</span>`)
+      .replace('class="sc-hud"', 'class="sc-hud show chips"')
+      .replace('Listening…</p>', 'Refine on · released</p>')
+      .replace('Hold your shortcut and talk', 'Released: text typed into Mail');
+  } else if (kind === 'privacy') {
+    markup = markup.replace('data-anim="privacy"', 'data-anim="privacy" data-phase="final"');
+  } else if (kind === 'meeting') {
+    markup = markup.replace('mt-rec show', 'mt-rec').replace('mt-result"', 'mt-result show"')
+      .replaceAll('class="turn"', 'class="turn in"').replaceAll('<li>', '<li class="in">')
+      .replace('class="mt-btn hot">Stop', 'class="mt-btn">Copy');
+  } else if (kind === 'swipe') {
+    markup = markup.replace('class="sc-typed">Say ', 'class="sc-typed">Say hello ')
+      .replace('<div class="sw-strip"><span></span><span class="mid"></span><span></span></div>', '<div class="sw-strip"><span>hell</span><span class="mid">hello</span><span>hallo</span></div>');
+  }
+}
+---
+{kind !== 'story' ? <Fragment set:html={markup} /> :
+  <div class="scene story-scene" data-w="500" data-h="520" style="max-width:500px;aspect-ratio:500/520;margin-inline:auto" role="img" aria-label="Say it: words stream in as you speak. Scribe it: Refine strikes out fillers and tidies the sentence. Send it: the clean text lands in a message and sends. Illustrated example; Scribe inserts text and you choose when to send.">
+    <div class="sc sc-story" data-anim="story" data-phase="sent" aria-hidden="true">
+      <div class="story-top"><svg class="trio"><use href="#trio" /></svg><span>Scribe</span><span class="story-state">Sent</span></div>
+      <div class="story-paper"><div class="story-paper-head"><span>To: Anna</span><span class="story-refine">Refine</span></div>
+        <div class="story-draft"><span class="story-words"></span><span class="sc-caret"></span></div>
+        <p class="story-clean">Can you send me the sales report by Friday?</p>
+        <div class="story-delivered"><span class="story-message">Can you send me the sales report by Friday?</span><span class="story-receipt">Delivered ✓</span></div>
+        <div class="story-compose"><span>Message</span><span class="story-send">↑</span></div>
+      </div>
+      <div class="story-mic"><div class="ring story-listening-ring"></div><svg class="trio"><use href="#trio" /></svg></div>
+      <p class="story-hint">Your words. Ready to go.</p>
+      <div class="story-beats"><span class="story-beat" data-beat="say"><b>Say it.</b></span><span class="story-beat" data-beat="scribe"><b>Scribe it.</b></span><span class="story-beat active" data-beat="send"><b>Send it.</b></span></div>
+    </div>
+  </div>
+}
+<script>
+import '@/scripts/scene-driver';
+</script>

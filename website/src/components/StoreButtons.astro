@@ -1,0 +1,15 @@
+---
+import { site } from '@/lib/site';
+const { platform } = Astro.props;
+// Before launch every store button is a disabled "Coming soon"; the URLs stay in site.ts.
+const soon = !site.launched;
+---
+<div class="cta-row">
+  {platform !== 'iphone' && <div class="store-option">
+    {soon ? <span class="btn primary lg" aria-disabled="true">Coming soon</span> : <a class="btn primary lg" href={site.downloads.mac}>Download for Mac</a>}
+    <p class="muted small">{soon ? 'Mac · macOS 26 · Apple silicon' : 'macOS 26 · Apple silicon'}</p></div>}
+  <!-- TODO(badge): replace the iPhone text button with the official Apple badge. -->
+  {platform !== 'mac' && (soon
+    ? <div class="store-option"><span class:list={['btn lg', platform === 'iphone' ? 'primary' : 'ghost']} aria-disabled="true">Coming soon</span><p class="muted small">iPhone · App Store</p></div>
+    : <a class:list={['btn lg', platform === 'iphone' ? 'primary' : 'ghost']} href={site.stores.iphone}>Download on the App Store</a>)}
+</div>

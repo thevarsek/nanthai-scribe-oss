@@ -1,0 +1,32 @@
+---
+import Logo from './Logo.astro';
+import { site } from '@/lib/site';
+const links = [{href:'/how-it-works',label:'How it works'},{href:'/features',label:'Features'},{href:'/docs',label:'Docs'}];
+const current = Astro.url.pathname;
+---
+<header class="site-header"><div class="container bar">
+  <Logo />
+  <nav class="site-nav" aria-label="Main"><ul id="nav-list" class="nav-list">
+    {links.map(link => <li><a href={link.href} aria-current={current.startsWith(link.href) ? 'page' : undefined}>{link.label}</a></li>)}
+  </ul></nav>
+  <div class="bar-right">{site.launched
+      ? <a class="btn primary nav-cta" href="/download" aria-current={current === '/download' ? 'page' : undefined}>Download <span aria-hidden="true">↗</span></a>
+      : <span class="btn primary nav-cta" aria-disabled="true">Coming soon</span>}
+    <button class="nav-toggle" aria-expanded="false" aria-controls="nav-list" aria-label="Open menu"><i></i><i></i></button>
+  </div>
+</div></header>
+<script>
+const toggle = document.querySelector<HTMLButtonElement>('.nav-toggle');
+const list = document.getElementById('nav-list');
+function closeMenu() { toggle?.setAttribute('aria-expanded','false'); toggle?.setAttribute('aria-label','Open menu'); list?.classList.remove('open'); }
+toggle?.addEventListener('click', () => {
+  const open = toggle.getAttribute('aria-expanded') !== 'true';
+  toggle.setAttribute('aria-expanded', String(open));
+  toggle.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+  list?.classList.toggle('open', open);
+  if (open) list?.querySelector('a')?.focus();
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && toggle?.getAttribute('aria-expanded') === 'true') { closeMenu(); toggle.focus(); } });
+document.addEventListener('click', e => { if (e.target instanceof Node && !document.querySelector('.site-header')?.contains(e.target)) closeMenu(); });
+matchMedia('(min-width: 769px)').addEventListener('change', closeMenu);
+</script>

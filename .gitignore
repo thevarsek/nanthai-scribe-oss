@@ -1,0 +1,18 @@
+.build/
+build/
+.DS_Store
+*.xcuserstate
+xcuserdata/
+# Bulk word-list downloads and built dictionaries (CC BY-SA, never committed).
+Tools/lexicon/work/
+Tools/context-lm/cache/
+Tools/context-lm/.venv/
+Tools/context-lm/__pycache__/
+Tools/context-lm/*.log
+
+DerivedData/
+.oss-preview/
+Config.local.mk
+website/node_modules/
+website/dist/
+website/.astro/

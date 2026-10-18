@@ -1,0 +1,102 @@
+---
+import Base from '@/layouts/Base.astro';
+import { site } from '@/lib/site';
+---
+<Base title='Privacy' description='How NanthAi Scribe handles your data: speech and text are processed on your device, nothing is uploaded, there is no account and no analytics. Network use is limited to model downloads you start and Mac update checks you turn on.'>
+
+<section class="band hero inner"><div class="container hero-copy"><h1 class="display">Privacy</h1><p class="lede">Scribe processes your speech and text on your Mac or iPhone. This page says what stays on the device, when the app uses the network, which permissions it asks for and why, and what you control.</p></div></section>
+
+<section class="band alt"><div class="container narrow prose policy-intro" data-reveal>
+  <h2>What stays on your device</h2>
+  <p>Speech recognition, Refine, meeting transcription and summaries all run locally. Dictation audio is handled in memory and discarded. Your notes, meetings, Dictionary, Snippets and Corrections are stored on the device and nowhere else. There is no account and no analytics, so nothing identifies you.</p>
+
+  <h2>Network requests</h2>
+  <p>Scribe uses the network in two cases, both started by you:</p>
+  <ul>
+    <li><strong>Model downloads</strong> you start: Apple speech assets for a language you add, and the optional Parakeet, Gemma 4 and speaker models from Hugging Face.</li>
+    <li><strong>Mac update checks</strong>, when you choose <em>Check for Updates…</em> or turn on automatic checks. They are off by default.</li>
+  </ul>
+  <p>Neither sends any audio, text or usage data. The iPhone keyboard makes no network requests at all.</p>
+
+  <h2>Permissions and why</h2>
+  <ul>
+    <li><strong>Microphone</strong> (Mac, iPhone): to hear you.</li>
+    <li><strong>Accessibility</strong> (Mac): to notice your talk shortcut, type the result and read a selection you ask Scribe to edit.</li>
+    <li><strong>System Audio Recording</strong> (Mac): to capture the other side of a call you record.</li>
+    <li><strong>Full Access</strong> (iPhone keyboard): to exchange text and settings with the Scribe app on the same phone.</li>
+    <li><strong>Contacts</strong> (optional): to spell names, only if you turn it on.</li>
+  </ul>
+
+  <h2>Data you control</h2>
+  <p><em>Keep history</em> decides how long untouched dictations stay: off, a day, 30 days or forever. Deleted notes and meetings wait 30 days in Recently Deleted. <em>Export Library…</em> writes everything to one file you keep; <em>Clear history</em> and <em>Reset typing learning</em> remove what Scribe has saved or learned. Uninstalling removes the rest.</p>
+
+  <h2>Contact</h2>
+  <p>Questions about privacy: <a href={`mailto:${site.contactEmail}`}>{site.contactEmail}</a>.</p>
+</div></section>
+
+<section class="band" id="policy"><div class="container narrow"><div class="sec-head" data-reveal><h2>Privacy policy</h2><p>Effective {site.policyDate}. Applies to NanthAi Scribe for macOS and iOS, including the keyboard extension, published by NanthAi.</p></div><div class="prose" data-reveal>
+      <p>NanthAi Scribe processes your speech and text on your device. We do not collect, store or sell your speech or text. The app has no user accounts, no analytics and no advertising. Network requests are limited to model downloads you start and Mac update checks you start or turn on.</p>
+
+      <h3>1. Data processed on your device</h3>
+      <ul>
+        <li><strong>Audio.</strong> While you hold the talk shortcut or after you tap Talk, the microphone audio is passed to on-device speech recognition (Apple's speech framework, or the optional Parakeet model). Dictation audio is processed in memory and discarded; it is not written to disk and not transmitted. Meeting audio (Mac and iPhone) is written to disk during a recording so a crash doesn't lose the meeting; after successful transcription it is deleted unless you turn on <em>Keep recordings' audio</em>.</li>
+        <li><strong>Transcripts and notes.</strong> Dictations, notes, meeting transcripts and summaries are stored locally: in Application Support on macOS, and in the app's container (shared with its keyboard via an App Group) on iOS. Your <em>Keep history</em> setting (Off, 1 day, 30 days, Forever) controls how long untouched dictations are kept; notes you edit, pin or create are kept until you delete them. Deleted notes and meetings wait 30 days in Recently Deleted, where you can restore them or delete them at once.</li>
+        <li><strong>Backups you export.</strong> <em>Export Library…</em> writes a file containing your notes, meetings, Dictionary, Snippets and Corrections to a location you choose. It leaves your device only if you move it.</li>
+        <li><strong>Rewriting (Refine).</strong> Text is rewritten by Apple Intelligence on the device, or by the optional Gemma 4 model running locally. No text is sent to any server.</li>
+        <li><strong>Selected text and screen context (Mac).</strong> With Accessibility permission, Scribe reads the text you have selected when you use Edit selection, and, if <em>Use screen context</em> is on, a bounded amount of text from the window you are dictating into. This is used only for the current dictation, is not stored, and never leaves the Mac. You can turn screen context off in Settings › Refine.</li>
+        <li><strong>Dictionary, Corrections, Snippets and settings.</strong> Stored locally. Auto-learning compares a dictation with your local correction; suggestions stay on the device. If you enable names from Contacts, Scribe reads given names, family names and nicknames locally to help spell them. On iOS they are shared with the keyboard extension through the App Group container. The keyboard's learned key offsets stay on the phone and are cleared by <em>Reset typing learning</em>.</li>
+        <li><strong>Clipboard (Mac).</strong> Scribe inserts text by placing it on the clipboard and pasting, then restores your previous clipboard contents. It does not read your clipboard for any other purpose.</li>
+      </ul>
+
+      <h3>2. Data we collect</h3>
+      <p>We do not collect audio, text or usage data. The Mac update check requests the appcast from scribe.nanthai.tech and sends no user content or telemetry. There are no accounts, logins, analytics, telemetry, crash reporting or advertising identifiers.</p>
+
+      <h3>3. Network connections</h3>
+      <p>Scribe uses the network for model downloads you start and Mac update checks you start or turn on:</p>
+      <ul>
+        <li><strong>Apple speech assets</strong> for a language you choose, downloaded by macOS or iOS from Apple.</li>
+        <li><strong>Optional models from Hugging Face</strong>: the Parakeet language pack ({site.models.parakeet.size}), the Gemma 4 rewrite model ({site.models.gemma.size}) and the meeting speakers model ({site.models.diarizer.size}). These downloads send the usual HTTP request information (such as your IP address) to Hugging Face, subject to Hugging Face's privacy policy. The app sends no user content with these requests. Downloads are never automatic.</li>
+        <li><strong>Mac update checks.</strong> Choose <em>Check for Updates…</em> in the app menu to check manually. Automatic checks are <strong>off by default</strong> and can be turned on in <em>Settings › General › Check for updates automatically</em>. When on, Scribe asks <strong>scribe.nanthai.tech once a day</strong> and sends nothing else. The check requests the appcast; as with any HTTP request, the host receives the usual connection information, such as your IP address. No audio, text, device profile, usage data or analytics are sent.</li>
+      </ul>
+      <p>Besides model downloads, this update check is the only network request the Mac app can make, and only when you start it or turn it on. The iPhone keyboard makes no network requests.</p>
+
+      <h3 id="keyboard">4. The keyboard extension and Full Access</h3>
+      <p>iOS keyboard extensions run in isolation and cannot use the microphone. To dictate, the Scribe keyboard asks the Scribe app to record, and receives the resulting text through a container the two share on your device (an App Group). Reading that container, your Dictionary, snippets and settings, and running Refine inside the keyboard, requires the <em>Allow Full Access</em> setting.</p>
+      <p>Full Access is used for:</p>
+      <ul>
+        <li>exchanging dictation state and text with the Scribe app on the same device;</li>
+        <li>reading your Dictionary, Snippets and keyboard settings;</li>
+        <li>running Refine on selected text with Apple Intelligence on the device.</li>
+      </ul>
+      <p>Full Access is <strong>not</strong> used to send anything over the network, upload what you type or keep a keystroke log. The keyboard uses the text around the cursor and the selection to place and refine text and to recognise local spelling corrections. Dictionary entries, Corrections and remembered keyboard words stay in the shared container on your phone; they are not uploaded.</p>
+
+      <h3 id="meetings">5. Meetings</h3>
+      <aside class="callout warning"><p class="callout-title">Warning</p><p>You must ask everyone for permission before you record or transcribe a conversation. Recording laws vary by country, and you are responsible for following them.</p></aside>
+      <p>Before each recording, Scribe shows a sheet that says: "Ask everyone for permission before you record. Recording laws vary by country." Recording a meeting captures your microphone and, with the <em>System Audio Recording</em> permission, the audio of other apps. On iPhone, meetings capture the microphone only; iOS does not let Scribe record other apps' call audio. Transcription, speaker separation and summarisation run on the device. Recordings are saved locally during capture and processing for recovery. After a transcript is available, audio is deleted unless you enable <em>Keep recordings' audio</em>, in which case you can play it back inside the meeting. If processing fails, the original audio remains so you can recover the meeting. A recording you import with <em>Transcribe a recording</em> is copied into Scribe's meeting storage and processed the same way; the copy is deleted after transcription unless <em>Keep recordings' audio</em> is on. Your original file is not changed.</p>
+
+      <h3>6. Permissions</h3>
+      <table>
+        <thead><tr><th>Permission</th><th>Platform</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td>Microphone</td><td>Mac, iPhone</td><td>To hear you while dictating or recording a meeting.</td></tr>
+          <tr><td>Speech recognition</td><td>Mac, iPhone</td><td>To use Apple's on-device speech recognition. Audio never leaves your device.</td></tr>
+          <tr><td>Accessibility</td><td>Mac</td><td>To detect your talk shortcut, paste text, read your selection and, optionally, the window text for screen context.</td></tr>
+          <tr><td>System Audio Recording</td><td>Mac</td><td>To capture the other participants of a meeting you choose to record.</td></tr>
+          <tr><td>Contacts (optional)</td><td>Mac, iPhone</td><td>To use names for spelling when you turn on Use names from Contacts.</td></tr>
+          <tr><td>Keyboard Full Access</td><td>iPhone</td><td>See section 4.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>7. Children</h3>
+      <p>Scribe does not collect personal data from anyone, including children.</p>
+
+      <h3>8. Your data, your control</h3>
+      <p>All data lives on your device. Delete notes or meetings in the Library (they can be restored from Recently Deleted for 30 days), use <em>Clear history</em>, delete downloaded models in Settings, export a backup whenever you like, and remove any remaining local files when uninstalling. Data retained in device backups is managed through your backup settings. Because we hold no data about you, there is nothing for us to export or erase on request.</p>
+
+      <h3>9. Changes</h3>
+      <p>If this changes, we'll update this page and its date.</p>
+
+      <h3>10. Contact</h3>
+      <p>Questions about privacy: <a href={`mailto:${site.contactEmail}`}>{site.contactEmail}</a>.</p>
+      </div></div></section>
+</Base>

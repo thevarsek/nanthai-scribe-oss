@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>tech.nanthai.Scribe</string>
+	<key>CFBundleName</key>
+	<string>NanthAi Scribe</string>
+	<key>CFBundleDisplayName</key>
+	<string>NanthAi Scribe</string>
+	<key>CFBundleExecutable</key>
+	<string>ScribeMac</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>26.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.productivity</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>NanthAi Scribe listens while you hold the dictation key and turns your speech into text on this Mac.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>NanthAi Scribe transcribes your speech on this Mac. Audio never leaves your device.</string>
+    <key>NSAudioCaptureUsageDescription</key>
+    <string>Records the other people in your meeting so Scribe can transcribe it. Stays on this Mac.</string>
+    <key>SUFeedURL</key>
+    <string>https://scribe.nanthai.tech/appcast.xml</string>
+    <key>SUPublicEDKey</key>
+    <string>PvyJtF3o1A/JqOg+WaT+p/Fc0ofU3NMSTSD2a2TkUs0=</string>
+    <key>SUEnableAutomaticChecks</key>
+    <false/>
+    <key>SUAutomaticallyUpdate</key>
+    <false/>
+    <key>SUAllowsAutomaticUpdates</key>
+    <false/>
+    <key>SUSendProfileInfo</key>
+    <false/>
+    <key>SUScheduledCheckInterval</key>
+    <integer>86400</integer>
+	<key>NSContactsUsageDescription</key>
+	<string>Helps Scribe spell the people you know. Names never leave this device.</string>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>tech.nanthai.scribe.backup</string>
+			<key>UTTypeDescription</key>
+			<string>Scribe Library Backup</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>com.apple.package</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>scribebackup</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
+</dict>
+</plist>

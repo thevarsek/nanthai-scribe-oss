@@ -1,0 +1,30 @@
+---
+import Header from '@/components/Header.astro';
+import Footer from '@/components/Footer.astro';
+import Symbols from '@/components/Symbols.astro';
+import { site } from '@/lib/site';
+import '@/styles/brand.css';
+import '@/styles/poster.css';
+interface Props { title: string; description: string; noindex?: boolean; }
+const { title, description, noindex = false } = Astro.props;
+const fullTitle = `${title} · ${site.name}`;
+// Pages build as files (/features.html) but are served at clean URLs; canonicals use the clean form.
+const canonical = new URL(Astro.url.pathname.replace(/\/index\.html$/, '/').replace(/\.html$/, ''), site.url);
+---
+<!doctype html><html lang="en"><head>
+  <script is:inline>document.documentElement.classList.add('js')</script>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{fullTitle}</title><meta name="description" content={description} />
+  <link rel="canonical" href={canonical} />
+  <meta property="og:type" content="website" /><meta property="og:site_name" content={site.name} />
+  <meta property="og:title" content={fullTitle} /><meta property="og:description" content={description} /><meta property="og:url" content={canonical} />
+  <meta property="og:image" content={new URL('/og.png', site.url)} /><meta property="og:image:alt" content="NanthAi Scribe — Say it. Scribe it. Send it." />
+  <meta name="twitter:card" content="summary" /><meta name="twitter:title" content={fullTitle} /><meta name="twitter:description" content={description} />
+  <meta name="theme-color" content="#16212E" />{noindex && <meta name="robots" content="noindex" />}
+  <link rel="icon" type="image/png" href="/favicon.png" /><link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="preload" href="/fonts/Geist-Regular.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/fonts/Geist-Bold.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/fonts/Geist-Medium.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/fonts/Geist-SemiBold.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="sitemap" href="/sitemap-index.xml" />
+</head><body><a class="skip" href="#main">Skip to content</a><Symbols /><Header /><main id="main" tabindex="-1"><slot /></main><Footer /><script>import '@/scripts/reveal';</script></body></html>

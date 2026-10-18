@@ -1,0 +1,96 @@
+---
+import Base from '@/layouts/Base.astro';
+import Scene from '@/components/Scene.astro';
+import StoreButtons from '@/components/StoreButtons.astro';
+const arrow = '<svg viewBox="0 0 24 24"><path d="M7 17L17 7M9 7h8v8"/></svg>';
+---
+<Base title='Say it. Scribe it. Send it.' description='Free, private, on-device dictation for Mac and iPhone. Hold a key, say what you mean, and clean text lands in the app you are in.'>
+
+<section class="band hero">
+  <div class="container hero-grid">
+    <div class="hero-copy">
+      <h1 class="display">Say it.<br><em>Scribe it.</em><br>Send it.</h1>
+      <p class="lede">Hold a key, say what you mean, and clean text lands where your cursor is. Free, private dictation for Mac and iPhone.</p>
+      <StoreButtons />
+    </div>
+    <div class="hero-stage"><Scene kind="story" /></div>
+  </div>
+</section>
+
+<section class="band alt">
+  <div class="container">
+    <div class="sec-head" data-reveal><h2>Hold. Talk. Let go.</h2><p>On the Mac, hold your talk shortcut in any app and speak. Your words appear in a small floating bar; let go and they are typed at the cursor, fillers removed, spacing fixed. Dictate in up to three languages at once and Scribe knows which one you are speaking.</p></div>
+    <div class="stage" data-reveal><Scene kind="dictate" max={1.4} /></div>
+    <p class="more" data-reveal><a href="/how-it-works">Every step, on Mac and iPhone <Fragment set:html={arrow} /></a></p>
+  </div>
+</section>
+
+<section class="band">
+  <div class="container">
+    <div class="sec-head" data-reveal><h2>Say it roughly.<br>Send it clean.</h2></div>
+    <div class="grid-2 align-start">
+      <div class="before-after" data-reveal="group">
+        <p class="label">You said</p>
+        <p class="raw">um so can you, can you send me the report by friday, the uh the sales one</p>
+        <p class="label">Refine typed</p>
+        <p class="clean">Can you send me the sales report by Friday?</p>
+      </div>
+      <div data-reveal>
+        <p>Add ⌘ while you hold the key, or switch Refine on, and Scribe rewrites what you said into clear writing. Grammar fixed, repetition gone, your meaning and your language kept. It never answers you.</p>
+        <ul class="tones">
+          <li><strong>Natural</strong><span>Your voice, tidied.</span></li>
+          <li><strong>Casual</strong><span>Short and friendly, for messages.</span></li>
+          <li><strong>Formal</strong><span>Complete sentences, no slang, for mail.</span></li>
+          <li><strong>Code</strong><span>Identifiers, paths and commands kept exactly.</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band alt">
+  <div class="container grid-2">
+    <div data-reveal>
+      <h2>On iPhone, type or talk.</h2>
+      <p>Scribe is a full keyboard laid out like Apple's, with autocorrect in 33 languages, curly quotes and swipe typing. Type as usual, and tap Talk only when speaking is quicker. Choose whether it opens on letters or on Talk. Refine works on any text you select.</p>
+      <p class="more"><a href="/docs/getting-started-iphone">Set up the iPhone keyboard <Fragment set:html={arrow} /></a></p>
+    </div>
+    <div class="handoff-stage" data-reveal><Scene kind="phone" /></div>
+  </div>
+</section>
+
+<section class="band">
+  <div class="container grid-2 rev">
+    <div data-reveal>
+      <h2>Record a call.<br>Read it back.</h2>
+      <p>Choose Record meeting during any call. Scribe captures your microphone and the call's audio, tells speakers apart and writes a short summary with action items. On iPhone, record in-person meetings with the microphone. Everything stays on the device. Always ask before you record.</p>
+      <p class="more"><a href="/docs/meetings">Meetings on Mac and iPhone <Fragment set:html={arrow} /></a></p>
+    </div>
+    <div class="stage tight" data-reveal><Scene kind="meeting" max={1.05} /></div>
+  </div>
+</section>
+
+<section class="band alt">
+  <div class="container grid-2">
+    <div class="stage tight" data-reveal><Scene kind="privacy" max={1.1} /></div>
+    <div data-reveal>
+      <h2>Nothing leaves your device.</h2>
+      <ul class="zeros">
+        <li><span class="zero">0</span><span>servers. Speech becomes text on your Mac or iPhone.</span></li>
+        <li><span class="zero">0</span><span>accounts. Nothing to sign up for.</span></li>
+        <li><span class="zero">0</span><span>analytics. We don't know you use Scribe, or what you say.</span></li>
+      </ul>
+      <p>The only network use is model downloads you start and Mac update checks you turn on.</p>
+      <p class="more"><a href="/privacy">How Scribe handles your data <Fragment set:html={arrow} /></a></p>
+    </div>
+  </div>
+</section>
+
+<section class="band final">
+  <div class="container final-in">
+    <h2 class="display" data-reveal>Free.<br><em>Yours.</em></h2>
+    <div data-reveal><p>No subscription, no account. Download the Mac app here, or get Scribe for iPhone on the App Store.</p><StoreButtons /></div>
+  </div>
+</section>
+
+</Base>

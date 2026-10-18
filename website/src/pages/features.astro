@@ -1,0 +1,111 @@
+---
+import Base from '@/layouts/Base.astro';
+import Scene from '@/components/Scene.astro';
+import StoreButtons from '@/components/StoreButtons.astro';
+import { site } from '@/lib/site';
+const arrow = '<svg viewBox="0 0 24 24"><path d="M7 17L17 7M9 7h8v8"/></svg>';
+// The best of Scribe, each with its own small animation.
+const callouts: { kind: 'tones' | 'meeting' | 'swipe' | 'learn' | 'shortcut' | 'transcribe'; max: number; title: string; body: string[]; link: [string, string] }[] = [
+  { kind: 'tones', max: 1, title: 'Four tones, and a tone per app', body: [
+    'Refine turns what you said into clear writing: Natural, Casual, Formal or Code. On the Mac, Style by app picks the tone for you: Casual in Messages and Slack, Code in Xcode and Terminal, your default everywhere else.',
+    'Code keeps identifiers, paths and commands exactly as spoken. Set an output language and Refine translates as it cleans up.'], link: ['/docs/refine', 'Refine in detail'] },
+  { kind: 'meeting', max: 1, title: 'A call becomes a transcript and a summary', body: [
+    'Choose Record meeting during any call on the Mac. Scribe captures your microphone and the call\'s audio, labels turns as You and Speaker 1, 2, 3, and writes a short summary with action items. On iPhone, record in-person meetings with the microphone for up to four hours.',
+    'Always ask before you record.'], link: ['/docs/meetings', 'Meetings on Mac'] },
+  { kind: 'swipe', max: 1, title: 'Swipe to type', body: [
+    'Behind Talk is a full keyboard laid out like Apple\'s: suggestions, autocorrect in 33 languages, curly quotes, long-press accents, a numbers layer. Slide across the letters and the word is inserted; alternatives wait in the suggestion bar.',
+    'Taps learn your aim over time, so the keys you tend to miss get a little easier to hit.'], link: ['/docs/keyboard', 'The keyboard in detail'] },
+  { kind: 'learn', max: 1, title: 'Correct it once', body: [
+    'When Scribe hears a name wrong and you fix it, it asks once whether to spell it that way from now on. Say yes and the word lands in your Dictionary with its heard-as spelling. Say no and it backs off.',
+    'Everything it learned is listed in Corrections, where you can edit or remove it.'], link: ['/docs/auto-learning', 'Auto-learning and Corrections'] },
+  { kind: 'shortcut', max: 1, title: 'Your key, your pedal', body: [
+    'On the Mac the talk shortcut is yours to choose: a single modifier like the right Option key, a combination, or a foot pedal sending F13 to F20. Hold it and talk, let go and the text is typed at your cursor.',
+    'Add Shift for hands-free, or ⌘ for Refine. On iPhone, start from the Action Button, Control Center or Back Tap.'], link: ['/docs/talk-shortcut', 'Choosing a talk shortcut'] },
+  { kind: 'transcribe', max: 1, title: 'Transcribe a recording', body: [
+    'Drop an audio file onto the Library on the Mac, or share one from Voice Memos or Files on iPhone. Scribe copies it into its meeting storage, tells speakers apart and writes a summary, exactly as it does for a live meeting.',
+    'Ask the people in the recording before you transcribe it.'], link: ['/docs/transcribe-a-recording', 'Transcribing a recording'] },
+];
+// Mac and iPhone, grouped by what you are doing. A note replaces ✓ where the platforms differ.
+type Cell = true | false | string;
+const journeys: { title: string; rows: [string, Cell, Cell][] }[] = [
+  { title: 'Dictate', rows: [
+    ['Hold or tap, talk, and the text lands', 'your talk shortcut', 'Talk button on the keyboard'],
+    ['Live words as you speak', 'floating bar', 'in the keyboard'],
+    ['Hands-free', 'Shift while holding', 'tap Talk, tap Done'],
+    ['Other ways to start', 'pedals and F13–F20', 'Action Button, Control Center, Back Tap, Shortcuts'],
+    ['Screen context for names and replies', true, false],
+    ['Mic stays ready after a dictation', false, '1, 5 or 15 minutes'],
+    ['Live Activity with a stop button', false, true],
+  ]},
+  { title: 'Refine', rows: [
+    ['Natural, Casual, Formal and Code', true, true],
+    ['Style by app', true, false],
+    ['Edit a selection by voice', '⌘ while holding', 'Say how'],
+    ['Presets on a selection', true, true],
+    ['Output language and translation', true, true],
+    ['Works without Apple Intelligence', 'optional Gemma 4', 'optional Gemma 4'],
+  ]},
+  { title: 'Library', rows: [
+    ['Every dictation becomes a note', true, true],
+    ['Edit, compare with the original, copy, share', true, true],
+    ['Recently Deleted, 30 days', true, true],
+    ['Backup and import', true, true],
+    ['Keep history: off, 1 day, 30 days, forever', true, true],
+  ]},
+  { title: 'Meetings', rows: [
+    ['Record a call', 'mic and call audio', 'mic only'],
+    ['Record in person', true, 'up to 4 hours'],
+    ['Speakers, summary, action items', true, true],
+    ['Keep the audio and play it back', true, true],
+    ['Transcribe a recording', 'drop a file on the Library', 'share from Voice Memos or Files'],
+  ]},
+  { title: 'Dictionary and learning', rows: [
+    ['Dictionary with heard-as spellings', true, true],
+    ['Auto-learning from your corrections', true, true],
+    ['Corrections you can review', true, true],
+    ['Snippets', true, true],
+  ]},
+  { title: 'Keyboard', rows: [
+    ['Full keyboard, autocorrect in 33 languages', false, true],
+    ['Swipe typing', false, true],
+    ['Taps that learn your aim', false, true],
+    ['Number hints or a number row', false, true],
+    ['Opens on letters or on Talk', false, true],
+  ]},
+  { title: 'Models and languages', rows: [
+    ['Dictation languages, detected as you speak', '3 languages', '2 languages'],
+    ['Parakeet pack: 25 European languages', true, true],
+    ['Gemma 4 rewrite engine', true, true],
+    ['Meeting speakers model', true, true],
+    ['Updates', 'in the app, checks off by default', 'App Store'],
+  ]},
+  { title: 'Privacy', rows: [
+    ['Speech and Refine on the device', true, true],
+    ['No account, no analytics', true, true],
+    ['Network use', 'downloads you start; update checks if on', 'downloads you start'],
+    ['Permissions', 'Accessibility, Microphone', 'Full Access, Microphone'],
+  ]},
+];
+const cell = (c: Cell) => c === true ? '✓' : c === false ? '—' : c;
+---
+<Base title='Features' description='Mac and iPhone side by side: dictation, Refine tones, Style by app, meetings, the keyboard, Dictionary and learning, models and languages, privacy.'>
+
+<section class="band hero inner"><div class="container hero-copy"><h1 class="display">What<br><em>Scribe does.</em></h1><p class="lede">The same ideas on both devices: hold or tap, talk, and the words land. Each platform adds what only it can do.</p></div></section>
+
+{callouts.map((c, i) => <section class:list={['band', { alt: i % 2 === 0 }]}><div class="container grid-2">
+  {i % 2 === 1 && <div class="stage tight" data-reveal><Scene kind={c.kind} max={c.max} /></div>}
+  <div data-reveal><h2>{c.title}</h2>{c.body.map(p => <p>{p}</p>)}<p class="more"><a href={c.link[0]}>{c.link[1]} <Fragment set:html={arrow} /></a></p></div>
+  {i % 2 === 0 && <div class="stage tight" data-reveal><Scene kind={c.kind} max={c.max} /></div>}
+</div></section>)}
+
+<section class="band" id="compare"><div class="container"><div class="sec-head" data-reveal><h2>Mac and iPhone, side by side</h2><p>Everything in both apps, grouped by what you are doing. A note says how a platform does it when the two differ.</p></div>
+<div data-reveal><table class="compare journeys"><thead><tr><th scope="col">Feature</th><th scope="col">Mac</th><th scope="col">iPhone</th></tr></thead>
+{journeys.map(j => <tbody><tr class="group"><th scope="rowgroup" colspan="3">{j.title}</th></tr>
+  {j.rows.map(([name, mac, ios]) => <tr><th scope="row">{name}</th><td data-label="Mac" class:list={{ no: mac === false }}>{cell(mac)}</td><td data-label="iPhone" class:list={{ no: ios === false }}>{cell(ios)}</td></tr>)}
+</tbody>)}
+</table></div>
+<p class="small muted">Requirements: {site.requirements.mac}; {site.requirements.iphone}. Refine uses Apple Intelligence on the device, or the optional Gemma 4 model where Apple Intelligence isn't available.</p></div></section>
+
+<section class="band alt final"><div class="container final-in"><h2 class="display" data-reveal>Free.<br><em>Yours.</em></h2><div data-reveal><p>No subscription. No account. Nothing leaves the device.</p><StoreButtons /></div></div></section>
+
+</Base>

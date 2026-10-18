@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://scribe.nanthai.tech/sitemap-index.xml

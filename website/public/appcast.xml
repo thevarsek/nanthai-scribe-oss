@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+  <channel>
+    <title>NanthAi Scribe updates</title>
+    <link>https://scribe.nanthai.tech</link>
+    <description>Updates for NanthAi Scribe for Mac.</description>
+    <language>en</language>
+    <!-- The release script fills this feed with signed release items. -->
+  </channel>
+</rss>

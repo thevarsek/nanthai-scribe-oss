@@ -1,0 +1,16 @@
+---
+import Docs from '@/layouts/Docs.astro';
+import { loadDocs, pathOf, platformLabel } from '@/lib/docs';
+const { grouped } = await loadDocs();
+---
+<Docs title="Docs" description="Set up Scribe on Mac and iPhone, then go deeper: dictation, Refine, the Library, meetings, the keyboard, Dictionary, models and privacy." slug="" wide>
+<h1>Docs</h1>
+<p class="lede">Start with your device. Every guide says what to do, what you'll see and what to check when it doesn't work.</p>
+<ul class="docs-groups">
+  {grouped.map(group => <li>
+    <h2>{group.label}</h2>
+    <ul>{group.entries.map(e => <li><a href={pathOf(e)}>{e.data.title}</a>{e.data.platform !== 'both' && <span class="platform">{platformLabel(e.data.platform)}</span>}<p>{e.data.description}</p></li>)}</ul>
+  </li>)}
+</ul>
+<p class="docs-more">Something missing? Write to <a href="mailto:support@nanthai.tech">support@nanthai.tech</a>.</p>
+</Docs>
