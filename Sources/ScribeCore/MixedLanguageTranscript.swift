@@ -7,18 +7,40 @@ struct SpeechToken: Sendable {
     let start: Double
     let end: Double
     let confidence: Double
+    let words: Int
+
+    init(text: String, start: Double, end: Double, confidence: Double, words: Int? = nil) {
+        self.text = text
+        self.start = start
+        self.end = end
+        self.confidence = confidence
+        self.words = words ?? MixedLanguageTranscript.wordCount(text)
+    }
 
     var midpoint: Double { (start + end) / 2 }
 
-    /// Result chunks need the same separator as the legacy string accumulator;
-    /// whitespace inside one attributed result is already present in its runs.
     static func appending(_ tail: [SpeechToken], to head: [SpeechToken]) -> [SpeechToken] {
-        guard let last = head.last, let first = tail.first else { return head + tail }
-        var tail = tail
-        let joined = LiveTranscriber.join(last.text, first.text)
-        tail[0] = .init(text: String(joined.dropFirst(last.text.count)), start: first.start,
-                        end: first.end, confidence: first.confidence)
-        return head + tail
+        var result = head
+        append(tail, to: &result)
+        return result
+    }
+
+    /// Appending in place keeps the finalized buffer uniquely owned between results.
+    static func append(_ tail: [SpeechToken], to head: inout [SpeechToken]) {
+        var tail = tail[...]
+        if let last = head.last {
+            while let first = tail.first {
+                let joined = LiveTranscriber.join(last.text, first.text)
+                let text = String(joined.dropFirst(last.text.count))
+                // A consumed punctuation-only chunk must not hide the preceding edge
+                // from the next result (or from the next token in this result).
+                if text.isEmpty { tail = tail.dropFirst(); continue }
+                tail[tail.startIndex] = .init(text: text, start: first.start,
+                                            end: first.end, confidence: first.confidence, words: first.words)
+                break
+            }
+        }
+        head.append(contentsOf: tail)
     }
 }
 
@@ -33,30 +55,31 @@ struct SpeechLane: Sendable {
     var hasTiming = true
     var volatileHasTiming = true
 
-    mutating func apply(_ text: AttributedString, isFinal: Bool) {
+    init(locale: Locale) { self.locale = locale }
+
+    mutating func apply(_ text: AttributedString, isFinal: Bool, countWords: Bool = true) {
         let segment = String(text.characters)
-        let timed = LiveTranscriber.timedTokens(text)
+        let timed = LiveTranscriber.timedTokens(text, countWords: countWords)
         if isFinal {
-            finalized = LiveTranscriber.join(finalized, segment)
+            LiveTranscriber.append(segment, to: &finalized)
             volatile = ""
-            tokens = SpeechToken.appending(timed.tokens, to: tokens)
+            SpeechToken.append(timed.tokens, to: &tokens)
             hasTiming = hasTiming && timed.complete
             volatileTokens = []
             volatileHasTiming = true
+            var sum = 0.0, count = 0
             for run in text.runs {
-                if let confidence = run.transcriptionConfidence {
-                    confidenceSum += confidence
-                    confidenceCount += 1
-                }
+                if let confidence = run.transcriptionConfidence { sum += confidence; count += 1 }
             }
+            confidenceSum += sum
+            confidenceCount += count
         } else {
             volatile = segment
-            // DESIGN: Apple reports zero confidence for volatile segments (one coarse
-            // range, not word ranges). A neutral live-only prior lets NL discriminate;
-            // finalized scores always use the recognizer's actual confidence.
+            // Apple reports zero confidence for coarse volatile ranges. Keep the live
+            // neutral prior; finalized scores use the recognizer's actual confidence.
             volatileTokens = timed.tokens.map {
                 SpeechToken(text: $0.text, start: $0.start, end: $0.end,
-                            confidence: $0.confidence > 0 ? $0.confidence : 0.5)
+                            confidence: $0.confidence > 0 ? $0.confidence : 0.5, words: $0.words)
             }
             volatileHasTiming = timed.complete
         }
@@ -70,26 +93,16 @@ struct SpeechLane: Sendable {
 }
 
 /// Selects coherent stretches of audio, rather than splicing independently guessed words.
-/// All state belongs to one utterance; final selection is independent of live hysteresis.
+/// Used only at release when language probing stayed ambiguous or a take needs recovery.
 struct MixedLanguageTranscript {
     struct Window {
         let start: Double
         let end: Double
         let candidates: [LanguagePicker.Candidate]
         let tokens: [[SpeechToken]]
-        let scores: [Double]
         let wordCount: Int
-        let isFinal: Bool
         var winner: Int
     }
-
-    private(set) var volatileText = ""
-    private var previous: [Window] = []
-    private var tailLane: Int
-    private var challenger: Int?
-    private var challengerUpdates = 0
-
-    init(displayIndex: Int = 0) { tailLane = displayIndex }
 
     static func finalSelection(lanes: [SpeechLane], batch: [LanguagePicker.Candidate]) -> LanguagePicker.Candidate? {
         let candidates = lanes.map(\.candidate) + batch
@@ -97,13 +110,11 @@ struct MixedLanguageTranscript {
         // Batch engines have no word timeline and remain whole-utterance candidates.
         guard best < lanes.count, lanes.count > 1 else { return candidates[best] }
         var selector = MixedLanguageTranscript()
-        return selector.select(lanes, live: false)
+        return selector.select(lanes)
     }
 
-    mutating func select(_ lanes: [SpeechLane], live: Bool) -> LanguagePicker.Candidate? {
-        volatileText = ""
+    mutating func select(_ lanes: [SpeechLane]) -> LanguagePicker.Candidate? {
         guard lanes.count > 1 else {
-            volatileText = lanes.first?.volatile.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             return lanes.first?.candidate
         }
         guard lanes.allSatisfy({ $0.hasTiming && $0.volatileHasTiming }) else {
@@ -120,7 +131,7 @@ struct MixedLanguageTranscript {
         var words = 0
         for index in reference.indices.dropLast() {
             let token = reference[index], next = reference[index + 1]
-            words += Self.wordCount(token.text)
+            words += token.words
             let punctuation = token.text.trimmingCharacters(in: .whitespacesAndNewlines).last
             let sentenceEnd = punctuation.map { ".!?。！？".contains($0) } ?? false
             if (next.start - token.end >= 0.35 || sentenceEnd),
@@ -130,20 +141,23 @@ struct MixedLanguageTranscript {
             }
         }
         cuts.append(end)
-        // A coarse volatile range cannot be assigned to one of the finalized word
-        // windows it spans. Merge those windows until timing arrives, rather than
-        // freezing the previous preview for the rest of an uninterrupted sentence.
-        if live {
-            let coarse = lanes.flatMap(\.volatileTokens).filter { Self.wordCount($0.text) > 1 }
-            cuts = cuts.enumerated().filter { index, cut in
-                index == 0 || index == cuts.count - 1 || !coarse.contains { $0.start < cut && $0.end > cut }
-            }.map(\.element)
-        }
         var windows: [Window] = []
+        var cursors = Array(repeating: 0, count: lanes.count)
+        let ordered = evidence.allSatisfy { tokens in
+            zip(tokens, tokens.dropFirst()).allSatisfy { $0.midpoint <= $1.midpoint }
+        } && zip(cuts, cuts.dropFirst()).allSatisfy { $0 <= $1 }
         for index in 0..<(cuts.count - 1) {
             let lower = cuts[index], upper = cuts[index + 1]
-            let windowTokens = evidence.map { tokens in
-                tokens.filter { $0.midpoint >= lower && ($0.midpoint < upper || index == cuts.count - 2) }
+            let windowTokens = evidence.indices.map { lane -> [SpeechToken] in
+                let tokens = evidence[lane]
+                guard ordered else {
+                    return tokens.filter { $0.midpoint >= lower && ($0.midpoint < upper || index == cuts.count - 2) }
+                }
+                while cursors[lane] < tokens.count, tokens[cursors[lane]].midpoint < lower { cursors[lane] += 1 }
+                let first = cursors[lane]
+                while cursors[lane] < tokens.count,
+                      tokens[cursors[lane]].midpoint < upper || index == cuts.count - 2 { cursors[lane] += 1 }
+                return Array(tokens[first..<cursors[lane]])
             }
             let candidates = lanes.indices.map { lane in
                 let tokens = windowTokens[lane]
@@ -151,15 +165,11 @@ struct MixedLanguageTranscript {
                     text: Self.joinTokens(tokens),
                     confidence: tokens.isEmpty ? 0 : tokens.map(\.confidence).reduce(0, +) / Double(tokens.count))
             }
-            let isFinal = lanes.allSatisfy { lane in
-                !lane.volatileTokens.contains { $0.midpoint >= lower && $0.midpoint <= upper }
-                    && (lane.tokens.last?.end ?? -.infinity) >= min(upper, end) - 0.2
-            }
             let scores = candidates.map { $0.text.isEmpty ? 0 : LanguagePicker.score($0, among: languages) }
             let winner = candidates.indices.filter { !candidates[$0].text.isEmpty }
                 .max(by: { scores[$0] < scores[$1] }) ?? 0
-            windows.append(.init(start: lower, end: upper, candidates: candidates, tokens: windowTokens, scores: scores,
-                                 wordCount: candidates.map { Self.wordCount($0.text) }.max() ?? 0, isFinal: isFinal, winner: winner))
+            windows.append(.init(start: lower, end: upper, candidates: candidates, tokens: windowTokens,
+                                 wordCount: candidates.map { Self.wordCount($0.text) }.max() ?? 0, winner: winner))
         }
         // DESIGN: Below three words, neighbour bias is inheritance when that lane has
         // text here: NL can confidently mislabel "ok" or "sì". Isolated word switches
@@ -171,34 +181,7 @@ struct MixedLanguageTranscript {
                 if !windows[index].candidates[winner].text.isEmpty { windows[index].winner = winner }
             }
         }
-        if live, !windows.isEmpty {
-            for index in windows.indices.dropLast() {
-                if let old = previous.first(where: {
-                    let overlap = min($0.end, windows[index].end) - max($0.start, windows[index].start)
-                    return $0.isFinal && overlap >= 0.8 * max($0.end - $0.start, windows[index].end - windows[index].start)
-                }), !windows[index].candidates[old.winner].text.isEmpty,
-                   windows[index].scores[windows[index].winner] - windows[index].scores[old.winner] < 0.25 {
-                    windows[index].winner = old.winner
-                }
-            }
-            let last = windows.count - 1
-            let proposed = windows[last].winner
-            if windows[last].isFinal {
-                tailLane = proposed
-                challenger = nil
-                challengerUpdates = 0
-            } else if proposed != tailLane,
-               windows[last].scores[proposed] - windows[last].scores[tailLane] >= 0.15 {
-                challengerUpdates = challenger == proposed ? challengerUpdates + 1 : 1
-                challenger = proposed
-                if challengerUpdates >= 2 { tailLane = proposed; challenger = nil; challengerUpdates = 0 }
-            } else { challenger = nil; challengerUpdates = 0 }
-            windows[last].winner = tailLane
-            previous = windows
-        }
         var text = ""
-        var finalizedPrefix = ""
-        var hasVolatile = false
         var emitted: [SpeechToken] = []
         var lastWinner: Int?
         var durations = Array(repeating: 0.0, count: lanes.count)
@@ -209,30 +192,19 @@ struct MixedLanguageTranscript {
             if let lastWinner, lastWinner != window.winner {
                 tokens = Self.removingBoundaryOverlap(tokens, after: emitted)
             }
-            let beforeWindow = text
-            text = Self.joinText(text, Self.joinTokens(tokens))
-            if !hasVolatile {
-                let volatile = lanes[window.winner].volatileTokens
-                let finalized = tokens.prefix { token in
-                    !volatile.contains { $0.start == token.start && $0.end == token.end }
-                }
-                finalizedPrefix = Self.joinText(beforeWindow, Self.joinTokens(Array(finalized)))
-                hasVolatile = finalized.count != tokens.count
-            }
+            Self.appendText(Self.joinTokens(tokens), to: &text)
             emitted += tokens
             lastWinner = window.winner
             durations[window.winner] += window.end - window.start
         }
-        volatileText = String(text.dropFirst(finalizedPrefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
         let dominant = durations.indices.max(by: { durations[$0] < durations[$1] }) ?? 0
         let selection = LanguagePicker.Candidate(locale: lanes[dominant].locale, text: text, confidence: 0)
         return selection
     }
 
-    private mutating func wholeLaneSelection(_ lanes: [SpeechLane]) -> LanguagePicker.Candidate? {
+    private func wholeLaneSelection(_ lanes: [SpeechLane]) -> LanguagePicker.Candidate? {
         let candidates = lanes.map(\.candidate)
         guard let index = LanguagePicker.bestIndex(of: candidates) else { return nil }
-        volatileText = lanes[index].volatile.trimmingCharacters(in: .whitespacesAndNewlines)
         return candidates[index]
     }
 
@@ -260,13 +232,17 @@ struct MixedLanguageTranscript {
     }
 
     static func joinText(_ head: String, _ tail: String) -> String {
+        var result = head
+        appendText(tail, to: &result)
+        return result
+    }
+
+    private static func appendText(_ tail: String, to head: inout String) {
         let tail = tail.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !tail.isEmpty else { return head }
-        if let first = tail.first, ",.!?;:，。！？、；：)]}’”".contains(first) { return head + tail }
-        // Unspaced scripts retain the recognizer's word boundaries.
+        guard !tail.isEmpty else { return }
         if let last = head.unicodeScalars.last, let first = tail.unicodeScalars.first,
-           isUnspaced(last) && isUnspaced(first) { return head + tail }
-        return LiveTranscriber.join(head, tail)
+           isUnspaced(last) && isUnspaced(first) { head += tail; return }
+        LiveTranscriber.append(tail, to: &head)
     }
 
     private static func isUnspaced(_ scalar: Unicode.Scalar) -> Bool {
@@ -274,7 +250,7 @@ struct MixedLanguageTranscript {
             || (0x0E00...0x0E7F).contains(scalar.value)
     }
 
-    private static func wordCount(_ text: String) -> Int {
+    static func wordCount(_ text: String) -> Int {
         let tokenizer = NLTokenizer(unit: .word)
         tokenizer.string = text
         return tokenizer.tokens(for: text.startIndex..<text.endIndex).count

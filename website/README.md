@@ -137,8 +137,9 @@ and swipe lexicons. Apple availability remains device-dependent.
 `netlify.toml`: repository base `website`, build `npm run build`, publish `dist`, Node 22.
 Static output includes canonical/OG metadata, a local social image, robots.txt and sitemap.
 The candidate canonical origin remains `https://scribe.nanthai.tech`; confirm when publishing.
-The DMG URL and iPhone store link are intentional placeholders; `TODO(badge)` marks the
-future iPhone badge. No deploy, DNS or Netlify publishing commands are part of this work.
+The iPhone store link is the real App Store URL; flip `launched.iphone` in `src/lib/site.ts`
+after approval to replace "Coming soon" with Apple's official badge (`public/badges/app-store.svg`,
+unmodified, from Apple's marketing toolbox). No deploy, DNS or Netlify publishing commands are part of this work.
 
 The Astro 5 toolchain reports npm audit advisories in Astro, sharp and esbuild. This site
 publishes only prebuilt static files and uses none of the affected server features,

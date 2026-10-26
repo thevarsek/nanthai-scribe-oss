@@ -47,9 +47,9 @@ final class HUDController {
             _ = dictation.phase
             _ = dictation.correctionPrompt
             _ = dictation.correctionAdded
-        } onChange: { [weak self] in
-            Task { @MainActor in
-                guard let self else { return }
+        } onChange: { [weak self, weak dictation] in
+            Task { @MainActor [weak self, weak dictation] in
+                guard let self, let dictation else { return }
                 self.panel.ignoresMouseEvents = dictation.correctionPrompt == nil
                 self.update(visible: dictation.phase != .idle || dictation.correctionPrompt != nil || dictation.correctionAdded)
                 self.observe(dictation)
@@ -97,7 +97,7 @@ struct HUDView: View {
                         }
                     }
                     // DESIGN: First-use Apple speech preparation uses a native progress indicator.
-                    if dictation.phase == .starting, let progress = dictation.assetProgress {
+                    if let progress = dictation.assetProgress {
                         ProgressView("Preparing…", value: progress).tint(Brand.sky)
                     } else if let busy = dictation.busyLabel {
                         ShimmerText(busy)
@@ -116,7 +116,7 @@ struct HUDView: View {
         .frame(minHeight: 56)
         .background(
             RoundedRectangle(cornerRadius: Brand.Radius.hud, style: .continuous)
-                .fill(Brand.navy.opacity(0.94))
+                .fill(Brand.ink.opacity(0.96))
                 .overlay(RoundedRectangle(cornerRadius: Brand.Radius.hud, style: .continuous).strokeBorder(.white.opacity(0.1)))
         )
         .animation(.easeOut(duration: 0.15), value: dictation.modes)

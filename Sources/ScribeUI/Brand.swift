@@ -4,6 +4,8 @@ import SwiftUI
 public enum Brand {
     public static let white = Color(hex: 0xF2F4F7)
     public static let sky = Color(hex: 0x1EC8FF)
+    /// The website's page ground; the darkest surface (Mac HUD).
+    public static let ink = Color(hex: 0x0A0E14)
     public static let navy = Color(hex: 0x16212E)
     public static let navyRaised = Color(hex: 0x1F2D3D)
     public static let cyan = Color(hex: 0x26C6DA)

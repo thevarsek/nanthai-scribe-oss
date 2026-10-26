@@ -20,7 +20,8 @@ plain native control with default styling and leave a `// DESIGN:` comment for r
 |---|---|---|
 | `white` | #F2F4F7 | Trio left bar |
 | `sky` | #1EC8FF | Trio ribbon bottom |
-| `navy` | #16212E | HUD / keyboard surface, app icon ground |
+| `ink` | #0A0E14 | Mac HUD surface; matches the website ground |
+| `navy` | #16212E | Keyboard surface, app icon ground |
 | `navyRaised` | #1F2D3D | Raised elements on navy (chips, keys) |
 | `cyan` | #26C6DA | Gradient start |
 | `amber` | #FFC235 | Gradient middle |
@@ -173,6 +174,9 @@ A real window (the app gains a Dock icon only while it's open; `NSApp.setActivat
 - On first start per session, a sheet: "Recording this meeting" · "Ask everyone for
   permission before you record. Recording laws vary by country." · [Start recording] [Cancel],
   with a "Don't show again" checkbox.
+- Before capture, prepare and verify the meeting language's exact Apple module configuration,
+  with the existing asset progress; reservation recovery releases only disabled languages.
+  After the reservation request, an equivalent installed locale permits analysis even when module status is stale.
 - While recording, the HUD is NOT shown (dictation keeps working as normal).
 
 **Window** — `NavigationSplitView`, 900×600 default, standard toolbar.

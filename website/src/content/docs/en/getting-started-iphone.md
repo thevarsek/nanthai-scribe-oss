@@ -8,7 +8,7 @@ platform: iphone
 
 ## What you need
 
-- An iPhone or iPad running **iOS 26**.
+- An iPhone running **iOS 26**.
 - Scribe from the **App Store**. It is one app with a keyboard inside it.
 
 ## Add the keyboard

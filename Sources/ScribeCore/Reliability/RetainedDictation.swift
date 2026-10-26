@@ -24,9 +24,9 @@ public struct RetainedDictation: Codable, Identifiable, Sendable, Equatable {
             .filter { MeetingAudioFiles.hasAudio($0.file) }
     }
     public func remove() throws { try FileManager.default.removeItem(at: folder) }
-    public func transcribe(parakeet: ParakeetTranscriber? = nil) async throws -> String {
-        let locale = await MeetingLanguage.detect(files: [file], among: languages.map(Locale.init(identifier:)), parakeet: parakeet)
-        return try await MeetingTranscriber.transcribe(file: file, locale: locale, speakerID: "you", parakeet: parakeet)
+    public func transcribe(parakeet: ParakeetTranscriber? = nil, enabledLocales: [Locale]? = nil) async throws -> String {
+        let locale = await MeetingLanguage.detect(files: [file], among: languages.map(Locale.init(identifier:)), parakeet: parakeet, enabledLocales: enabledLocales)
+        return try await MeetingTranscriber.transcribe(file: file, locale: locale, speakerID: "you", parakeet: parakeet, enabledLocales: enabledLocales)
             .map(\.text).joined(separator: " ")
     }
 }

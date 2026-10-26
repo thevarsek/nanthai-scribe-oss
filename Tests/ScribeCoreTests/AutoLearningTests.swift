@@ -104,13 +104,69 @@ import Testing
         #expect(Set(result.map(\.term)) == Set(["John", "Shawn", "Niccolò"]))
         #expect(NameMatcher.matches(in: "", names: names).isEmpty)
         #expect(NameMatcher.matches(in: "go to", names: ["Jo"]).isEmpty)
-        #expect(NameMatcher.matches(in: "jon", names: (1...30).map { "John" + String(repeating: "n", count: $0) }).count == 10)
+        let thirty = "aeiou".flatMap { vowel in ["", "a", "e", "i", "o", "u"].map { "J\(vowel)n\($0)" } }
+        #expect(NameMatcher.matches(in: "jon", names: thirty).count == 10)
         #expect(NameMatcher.matches(in: "привет катя", names: ["Катя"]).first?.term == "Катя")
     }
     @Test func onlyEphemeralReplacement() {
         let matches = NameMatcher.matches(in: "ask jon", names: ["John", "Zqxv"])
         #expect(DictionaryReplacement.apply(to: "ask jon", dictionary: matches) == "ask John")
         #expect(matches.flatMap(\.variants) == ["jon"])
+    }
+}
+
+/// The owner's iPhone, with "Use names from Contacts" on, turned these words into contacts.
+@Suite struct NameMatcherCommonWordTests {
+    static let contacts = ["Andy", "Mara", "Dave", "Jake", "Linsey", "Donna", "Farah", "Alain", "Falso", "Ally",
+                           "Giulia", "Shawn", "Marc", "De Luca", "Anna Maria"]
+    /// Stands in for the spell checker: ordinary English and Italian words, lowercased.
+    static let lexicon: Set<String> = [
+        "and", "more", "have", "make", "lines", "done", "far", "again", "also", "really", "all", "mark",
+        "i", "we", "need", "to", "the", "so", "it", "is", "a", "question", "met", "today", "called", "said",
+        "ho", "parlato", "con", "ieri", "e", "ma", "fare", "anche", "domani", "di", "chiamo", "sono", "stata", "da",
+    ]
+    static func isWord(_ word: String) -> Bool { lexicon.contains(word) }
+    static func replaced(_ text: String) -> String {
+        DictionaryReplacement.apply(to: text, dictionary: NameMatcher.matches(in: text, names: contacts, isWord: isWord))
+    }
+
+    @Test(arguments: [("and", "Andy"), ("more", "Mara"), ("have", "Dave"), ("make", "Jake"), ("lines", "Linsey"),
+                      ("done", "Donna"), ("far", "Farah"), ("again", "Alain"), ("also", "Falso"), ("really", "Ally")])
+    func ownerPairsNeverMatch(word: String, name: String) {
+        for text in ["we said \(word) it is", "\(word.prefix(1).uppercased() + word.dropFirst()) it is.", "so. \(word.prefix(1).uppercased() + word.dropFirst()) we", word] {
+            #expect(NameMatcher.matches(in: text, names: [name], isWord: Self.isWord).isEmpty, "\(text) → \(name)")
+        }
+    }
+    @Test func ownerSentenceIsUntouched() {
+        let text = "I have to make more lines and also really get it done again so far all is fine"
+        #expect(Self.replaced(text) == text)
+        #expect(Self.replaced("ho parlato con chiara e anche ma fare domani") == "ho parlato con chiara e anche ma fare domani")
+    }
+    /// Without a spell checker, the tagger still keeps function words ("and", "e", "di") out.
+    @Test func functionWordsNeedNoLexicon() {
+        #expect(NameMatcher.matches(in: "we need this and that", names: ["Andy"]).isEmpty)
+        #expect(NameMatcher.matches(in: "parlo di te e di lui", names: ["Dino", "Eva"]).isEmpty)
+    }
+    @Test func misheardNamesStillFixed() {
+        #expect(Self.replaced("I called sean today") == "I called Shawn today")
+        #expect(Self.replaced("ho parlato con julia ieri") == "ho parlato con Giulia ieri")
+        #expect(Self.replaced("ho parlato con Julia ieri") == "ho parlato con Giulia ieri")
+        #expect(Self.replaced("Julia called today") == "Giulia called today")
+        #expect(Self.replaced("domani chiamo ana maria") == "domani chiamo Anna Maria")
+        #expect(Self.replaced("sono stata da de luka ieri") == "sono stata da De Luca ieri")
+        #expect(Self.replaced("I met andie today") == "I met Andy today")
+    }
+    /// The recogniser's capital mid-sentence marks a proper noun, but replacement is global, so a
+    /// lowercase "mark" elsewhere vetoes it.
+    @Test func capitalisedWordOnlyWhenEveryOccurrenceIs() {
+        #expect(Self.replaced("I met Mark today") == "I met Marc today")
+        #expect(Self.replaced("Mark called today") == "Mark called today")
+        #expect(Self.replaced("I met Mark today, question mark") == "I met Mark today, question mark")
+    }
+    @Test func stricterSimilarity() {
+        #expect(NameMatcher.sounds("also", like: "Falso", score: CorrectionDetector.similarity("also", "Falso")) == false)
+        #expect(NameMatcher.sounds("again", like: "Alain", score: CorrectionDetector.similarity("again", "Alain")) == false)
+        #expect(NameMatcher.sounds("jon", like: "John", score: CorrectionDetector.similarity("jon", "John")))
     }
 }
 

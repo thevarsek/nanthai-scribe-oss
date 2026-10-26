@@ -84,4 +84,19 @@ struct RevealTextTests {
             #expect(state.words.allSatisfy { $0.volatile })
         }
     }
+
+    @Test func elisionSurvivesLiveRevisionAndFinalizationVerbatim() {
+        for mark in ["'", "’"] {
+            var state = RevealState()
+            for (offset, text) in ["Parliamo un po", "Parliamo un po" + mark,
+                                    "Parliamo un po" + mark + " in italiano."].enumerated() {
+                state = state.updating(.init(text: text, volatileTail: text),
+                                       at: now.addingTimeInterval(Double(offset) * 0.1), reduceMotion: false)
+                #expect(state.words.map(\.text).joined() == text)
+            }
+            let final = "Parliamo un po" + mark + " in italiano."
+            state = state.updating(.init(text: final, volatileTail: ""), at: now.addingTimeInterval(0.3), reduceMotion: false)
+            #expect(state.words.map(\.text).joined() == final)
+        }
+    }
 }

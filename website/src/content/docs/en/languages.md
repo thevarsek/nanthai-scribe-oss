@@ -9,7 +9,7 @@ platform: both
 ## Choose your languages
 
 - **Mac**: the menu bar menu › Languages, or Settings › Languages. Up to **three**.
-- **iPhone**: Settings › Languages. Up to **two**.
+- **iPhone**: Settings › Languages. Up to **two**. iOS limits how much memory a keyboard may use, and each language adds its own dictionary and suggestions to the keyboard, so the iPhone allows one fewer than the Mac.
 
 Scribe listens for all of them at once and works out which one you are speaking, so you can switch mid-day, or mid-sentence, without touching a setting.
 

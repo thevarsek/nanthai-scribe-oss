@@ -1,3 +1,4 @@
+import AppKit
 import Contacts
 import Foundation
 import Observation
@@ -20,7 +21,7 @@ final class ContactsNames {
     }
 
     #if DEBUG
-    func previewEnabled(_ value: Bool) { enabled = value; names = [] }
+    func previewEnabled(_ value: Bool, names: [String] = []) { enabled = value; self.names = value ? names : [] }
     #endif
 
     func setEnabled(_ value: Bool) {
@@ -54,9 +55,36 @@ final class ContactsNames {
         Task { await load(expected: expected) }
     }
 
-    func matches(in text: String) -> [DictionaryEntry] {
-        guard enabled else { return [] }
-        return NameMatcher.matches(in: text, names: names)
+    /// Off means off: no names are held and nothing is matched. `languages` are the dictation
+    /// languages, whose ordinary words a name may never replace.
+    func matches(in text: String, languages: [String]) -> [DictionaryEntry] {
+        guard enabled, !names.isEmpty else { return [] }
+        let dictionaries = Self.spellLanguages(for: languages, available: NSSpellChecker.shared.availableLanguages)
+        return NameMatcher.matches(in: text, names: names) { Self.isWord($0, in: dictionaries) }
+    }
+
+    /// An ordinary word in any of the dictionaries. Lowercase is what makes "julia" a misspelling
+    /// while "and" stays a word.
+    static func isWord(_ word: String, in dictionaries: [String]) -> Bool {
+        guard !word.isEmpty else { return false }
+        let checker = NSSpellChecker.shared
+        return dictionaries.contains { language in
+            checker.checkSpelling(of: word, startingAt: 0, language: language, wrap: false,
+                                  inSpellDocumentWithTag: 0, wordCount: nil).location == NSNotFound
+        }
+    }
+
+    /// The spell checker's dictionary for each dictation language, exact region first.
+    nonisolated static func spellLanguages(for languages: [String], available: [String]) -> [String] {
+        var chosen: [String] = []
+        for identifier in languages {
+            let wanted = identifier.replacingOccurrences(of: "-", with: "_")
+            let code = String(wanted.prefix { $0 != "_" })
+            let match = available.first { $0 == wanted } ?? available.first { $0 == code }
+                ?? available.first { $0.hasPrefix(code + "_") }
+            if let match, !chosen.contains(match) { chosen.append(match) }
+        }
+        return chosen
     }
 
     private func load(expected: Int) async {

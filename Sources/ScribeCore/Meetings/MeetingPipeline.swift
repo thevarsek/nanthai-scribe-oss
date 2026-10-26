@@ -34,7 +34,7 @@ public enum MeetingPipeline {
     }
 
     public static func transcribe(_ segments: [MeetingAudioSegment], folder: URL, languages: [Locale],
-                                  parakeetDirectory: URL?, diarizerDirectory: URL,
+                                  parakeetDirectory: URL?, diarizerDirectory: URL, enabledLocales: [Locale]? = nil,
                                   progress: @Sendable (MeetingProgress.Step, MeetingProgress.Status) async -> Void,
                                   fraction: @escaping @Sendable (MeetingProgress.Step, Double) async -> Void = { _, _ in }) async throws -> Transcript {
         let segments = segments.filter { MeetingAudioFiles.hasAudio(folder.appending(path: $0.file)) }
@@ -43,7 +43,7 @@ public enum MeetingPipeline {
         let urls = segments.map { folder.appending(path: $0.file) }
         let preferred = zip(segments, urls).filter { $0.0.stream == MeetingAudioSegment.microphone }.map(\.1)
             + zip(segments, urls).filter { $0.0.stream != MeetingAudioSegment.microphone }.map(\.1)
-        let locale = await MeetingLanguage.detect(files: preferred, among: languages, parakeet: parakeet)
+        let locale = await MeetingLanguage.detect(files: preferred, among: languages, parakeet: parakeet, enabledLocales: enabledLocales)
         try Task.checkCancellation()
         await progress(.transcribing, .active)
         var collected: [String: [MeetingTurn]] = [:]
@@ -55,7 +55,7 @@ public enum MeetingPipeline {
             do {
                 collected[segment.stream, default: []] += try await MeetingTranscriber.transcribe(
                     file: url, locale: locale, speakerID: segment.stream == MeetingAudioSegment.microphone ? "you" : "unassigned",
-                    offset: segment.offset, parakeet: parakeet) { completed in
+                    offset: segment.offset, parakeet: parakeet, enabledLocales: enabledLocales) { completed in
                         await fraction(.transcribing, (Double(index) + completed) / Double(segments.count))
                     }
             } catch {

@@ -4,11 +4,11 @@ export const site = {
   shortName: "Scribe",
   url: "https://scribe.nanthai.tech",
   parent: { name: "NanthAi", url: "https://nanthai.tech" },
-  // Launch day: set launched to true and every download button becomes a link to the URLs below.
-  launched: false,
+  // Each platform's buttons become links to the URLs below once it ships; until then "Coming soon".
+  launched: { mac: true, iphone: false },
   contactEmail: "support@nanthai.tech",
   downloads: { mac: "/download/NanthAi-Scribe.dmg" },
-  stores: { iphone: "#app-store-ios" },
+  stores: { iphone: "https://apps.apple.com/app/id6824580147" },
   version: "0.1",
   policyDate: "2026-10-18",
   requirements: { mac: "macOS 26 on Apple silicon", iphone: "iOS 26" },

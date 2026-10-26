@@ -16,3 +16,10 @@ Config.local.mk
 website/node_modules/
 website/dist/
 website/.astro/
+Tools/context-lm/private/
+
+# Neural next-word training corpora and local Python bytecode (never committed).
+Tools/neural-lm/cache/
+Tools/neural-lm/__pycache__/
+Tools/neural-lm/.venv-train/
+Tools/neural-lm/train/__pycache__/

@@ -1,0 +1,49 @@
+---
+import Base from './Base.astro';
+import StoreButtons from '@/components/StoreButtons.astro';
+import { pathOf, type Guide } from '@/lib/guides';
+import '@/styles/docs.css';
+import '@/styles/guides.css';
+interface Props {
+  title: string;
+  description: string;
+  headings: { depth: number; slug: string; text: string }[];
+  related: Guide[];
+}
+const { title, description, headings, related } = Astro.props;
+const toc = headings.filter(heading => heading.depth === 2);
+---
+<Base title={title} description={description} ogType="article">
+  <slot name="head" slot="head" />
+  <div class="container guide-shell">
+    <nav class="guide-breadcrumbs" aria-label="Breadcrumb">
+      <a href="/">Home</a><span aria-hidden="true">/</span><a href="/guides">Guides</a>
+    </nav>
+    <div class="guide-reading">
+      <article class="docs-article prose">
+        <h1>{title}</h1>
+        <slot />
+      </article>
+      {toc.length > 0 && <aside class="docs-toc"><nav aria-label="On this page">
+        <p>On this page</p>
+        <ul>{toc.map(heading => <li class="d2"><a href={'#' + heading.slug}>{heading.text}</a></li>)}</ul>
+      </nav></aside>}
+    </div>
+  </div>
+  <section class="band alt final"><div class="container final-in">
+    <h2 class="display">Try<br /><em>Scribe.</em></h2>
+    <div><p>Dictate, edit and transcribe on your Mac.</p><StoreButtons platform="mac" /></div>
+  </div></section>
+  {related.length > 0 && <section class="band"><div class="container">
+    <h2 class="guide-more-title">More guides</h2>
+    <ul class="docs-groups guide-cards guide-more">
+      {related.map(guide => <li>
+        <h3><a href={pathOf(guide)}>{guide.data.title}</a></h3>
+        <p>{guide.data.description}</p>
+      </li>)}
+    </ul>
+  </div></section>}
+</Base>
+<script>
+import '@/scripts/toc';
+</script>

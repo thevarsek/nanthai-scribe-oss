@@ -4,8 +4,10 @@ import Tokenizers
 
 /// The only tokenizer entry point accepts a local folder. It cannot resolve a Hub ID.
 /// Tokenizers internally links Hub, but this local overload reads JSON/Jinja from disk.
-struct LocalTokenizerLoader: TokenizerLoader {
-    func load(from directory: URL) async throws -> any MLXLMCommon.Tokenizer {
+public struct LocalTokenizerLoader: TokenizerLoader {
+    public init() {}
+
+    public func load(from directory: URL) async throws -> any MLXLMCommon.Tokenizer {
         let tokenizer = try await AutoTokenizer.from(modelFolder: directory)
         let template = try String(contentsOf: directory.appending(path: "chat_template.jinja"), encoding: .utf8)
         return LocalTokenizer(upstream: tokenizer, template: template)

@@ -44,4 +44,34 @@ import Testing
         #expect(dictation.learning.document.corrections.entries.isEmpty)
         dictation.previewCorrection(nil)
     }
+
+    /// Turning the option off drops the loaded names at once and persists "off".
+    @Test func contactsOffIsOff() throws {
+        let suite = "M9MacContacts-\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let contacts = ContactsNames(defaults: defaults)
+        #expect(!contacts.enabled)
+        contacts.previewEnabled(true, names: ["John", "Andy"])
+        #expect(contacts.matches(in: "ask jon", languages: ["en_US"]).map(\.term) == ["John"])
+        contacts.setEnabled(false)
+        #expect(!contacts.enabled && contacts.names.isEmpty)
+        #expect(defaults.object(forKey: "useContactNames") as? Bool == false)
+        #expect(contacts.matches(in: "ask jon", languages: ["en_US"]).isEmpty)
+        contacts.refresh()
+        #expect(contacts.names.isEmpty)
+    }
+
+    /// The owner's pairs against the real macOS dictionaries, English and Italian.
+    @Test func contactsNeverReplaceOrdinaryWords() {
+        let contacts = ContactsNames(defaults: UserDefaults(suiteName: "M9MacWords-\(UUID())")!)
+        contacts.previewEnabled(true, names: ["Andy", "Mara", "Dave", "Jake", "Linsey", "Donna", "Farah", "Alain", "Falso", "Ally",
+                                              "Giulia", "Shawn", "Niccolò"])
+        let english = "I have to make more lines and also really get it done again so far. And all of it"
+        #expect(contacts.matches(in: english, languages: ["en_US", "it_IT"]).isEmpty)
+        #expect(contacts.matches(in: "ho fatto anche le linee e poi basta", languages: ["it_IT"]).isEmpty)
+        #expect(Set(contacts.matches(in: "I called sean and julia", languages: ["en_US"]).map(\.term)) == ["Shawn", "Giulia"])
+        #expect(contacts.matches(in: "ho sentito nicolo ieri", languages: ["it_IT"]).map(\.term) == ["Niccolò"])
+        #expect(ContactsNames.spellLanguages(for: ["en_US", "it-IT", "xx_YY"], available: ["it", "en_GB", "en"]) == ["en", "it"])
+    }
 }

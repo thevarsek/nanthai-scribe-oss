@@ -2,9 +2,12 @@ import AVFoundation
 import Foundation
 import Speech
 
-/// Long-form, independent analyzers per recording stream; no dictation state or asset downloads.
+/// Long-form, independent analyzers per recording stream, with assets prepared before analysis.
 public enum MeetingTranscriber {
-    public static func validate(locale: Locale) async throws { _ = try await makeModule(locale: locale) }
+    public static func validate(locale: Locale, enabledLocales: [Locale]? = nil,
+                                progress: (@MainActor (Double?) -> Void)? = nil) async throws {
+        _ = try await makeModule(locale: locale, enabledLocales: enabledLocales, progress: progress)
+    }
 
     /// Apple's recognizer is preferred; Parakeet only serves languages Apple doesn't offer at
     /// all, routed exactly as dictation's pack languages are.
@@ -13,39 +16,41 @@ public enum MeetingTranscriber {
         return !BatchRouting.matching(packOnly, supportedBy: ParakeetTranscriber.supportedLanguages).isEmpty
     }
 
-    private static func makeModule(locale: Locale) async throws -> SpeechTranscriber {
+    private static func makeModule(locale: Locale, enabledLocales: [Locale]?,
+                                   progress: (@MainActor (Double?) -> Void)? = nil) async throws -> SpeechTranscriber {
         guard let supported = await SpeechTranscriber.supportedLocale(equivalentTo: locale) else {
             throw ScribeError.unsupportedLocale(locale)
         }
         let module = SpeechTranscriber(locale: supported, transcriptionOptions: [],
                                        reportingOptions: [], attributeOptions: [.audioTimeRange, .transcriptionConfidence])
-        guard await AssetInventory.status(forModules: [module]) == .installed else {
-            throw RewriteError.unavailable("The meeting language isn't installed. Choose an installed dictation language in Settings.")
-        }
+        try await SpeechAssetPreparation.prepare(module: module, locale: supported,
+                                                 enabledLocales: enabledLocales, progress: progress)
         return module
     }
 
+    /// `enabledLocales` protects current preferences when replaying recordings made with older languages.
+    /// Leave it nil when unknown; preparation then preserves all existing reservations.
     public static func transcribe(file url: URL, locale: Locale, speakerID: String,
-                                  offset: Double = 0, parakeet: ParakeetTranscriber? = nil,
+                                  offset: Double = 0, parakeet: ParakeetTranscriber? = nil, enabledLocales: [Locale]? = nil,
                                   progress: @escaping @Sendable (Double) async -> Void = { _ in }) async throws -> [MeetingTurn] {
         if let parakeet, await needsParakeet(locale) {
             return try await parakeet.transcribe(file: url).map {
                 .init(speakerID: speakerID, start: offset + $0.start, end: offset + $0.end, text: $0.text)
             }
         }
-        return try await transcribe(file: url, locale: locale, speakerID: speakerID, offset: offset, seconds: nil, progress: progress).turns
+        return try await transcribe(file: url, locale: locale, speakerID: speakerID, offset: offset, seconds: nil, enabledLocales: enabledLocales, progress: progress).turns
     }
 
     /// A short stretch from the start of a file, with the recognizer's confidence, to choose a language.
-    public static func probe(file url: URL, locale: Locale, seconds: Double) async throws -> LanguagePicker.Candidate {
-        let result = try await transcribe(file: url, locale: locale, speakerID: "probe", offset: 0, seconds: seconds)
+    public static func probe(file url: URL, locale: Locale, seconds: Double, enabledLocales: [Locale]? = nil) async throws -> LanguagePicker.Candidate {
+        let result = try await transcribe(file: url, locale: locale, speakerID: "probe", offset: 0, seconds: seconds, enabledLocales: enabledLocales)
         let text = result.turns.map(\.text).joined().trimmingCharacters(in: .whitespacesAndNewlines)
         return .init(locale: locale, text: text, confidence: result.confidence)
     }
 
     private static func transcribe(file url: URL, locale: Locale, speakerID: String, offset: Double,
-                                   seconds: Double?, progress: @escaping @Sendable (Double) async -> Void = { _ in }) async throws -> (turns: [MeetingTurn], confidence: Double) {
-        let module = try await makeModule(locale: locale)
+                                   seconds: Double?, enabledLocales: [Locale]?, progress: @escaping @Sendable (Double) async -> Void = { _ in }) async throws -> (turns: [MeetingTurn], confidence: Double) {
+        let module = try await makeModule(locale: locale, enabledLocales: enabledLocales)
         let analyzer = SpeechAnalyzer(modules: [module])
         let duration = max(0.001, seconds ?? MeetingAudioFiles.duration(of: url) ?? 0.001)
         let results = Task<([MeetingTurn], Double), Error> {
@@ -120,7 +125,7 @@ public enum MeetingLanguage {
 
     /// - Parameter files: streams in preference order; the first with any speech decides.
     public static func detect(files: [URL], among locales: [Locale], parakeet: ParakeetTranscriber?,
-                              seconds: Double = probeSeconds) async -> Locale {
+                              seconds: Double = probeSeconds, enabledLocales: [Locale]? = nil) async -> Locale {
         guard let first = locales.first else { return .current }
         guard locales.count > 1 else { return first }
         var apple: [Locale] = [], pack: [Locale] = []
@@ -130,7 +135,7 @@ public enum MeetingLanguage {
         for file in files {
             var candidates: [LanguagePicker.Candidate] = []
             for locale in apple {
-                if let candidate = try? await MeetingTranscriber.probe(file: file, locale: locale, seconds: seconds) {
+                if let candidate = try? await MeetingTranscriber.probe(file: file, locale: locale, seconds: seconds, enabledLocales: enabledLocales.map { $0 + locales }) {
                     candidates.append(candidate)
                 }
             }

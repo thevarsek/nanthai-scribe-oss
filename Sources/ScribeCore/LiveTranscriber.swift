@@ -3,6 +3,14 @@ import CoreMedia
 import Foundation
 import Speech
 
+/// Opt-in timings contain no recognized text and do not write to the system log.
+@_spi(Performance) public struct SpeechPerformanceSample: Sendable {
+    public let phase: String
+    public let audioEnd: Double
+    public let milliseconds: Double
+    public let onMainThread: Bool
+}
+
 public enum ScribeError: LocalizedError {
     case unsupportedLocale(Locale)
     case noAudioFormat
@@ -27,8 +35,9 @@ public enum ScribeError: LocalizedError {
 ///
 /// Built on `SpeechAnalyzer` + `SpeechTranscriber`: no network, no bundled model (the OS
 /// manages model assets). Apple's recognizer hears a single language, so for multilingual
-/// users one transcriber per language runs on the same audio and timed windows select the
-/// best stretches (`LanguagePicker` is the fallback without timing). Create one per utterance: `start()`, push audio into the returned
+/// users probe their chosen languages, then keep only the early winner running. Suspicious
+/// finalized stretches are revised from short alternate-language passes; consecutive flips
+/// move live recognition to that language. Create one per utterance: `start()`, push audio into the returned
 /// continuation, then `finish()`.
 @MainActor
 public final class LiveTranscriber {
@@ -38,27 +47,39 @@ public final class LiveTranscriber {
     public private(set) var volatileText = ""
     public var onUpdate: ((String) -> Void)?
     public var onAssetProgress: ((Double?) -> Void)?
+    @_spi(Performance) public var onPerformanceSample: (@Sendable (SpeechPerformanceSample) -> Void)?
     public private(set) var retainedTake: RetainedDictation?
-    private var audioFile: AVAudioFile?
+    private var audioStore: SpeechAudioStore?
     private var audioLength: Double = 0
 
     public private(set) var appleErrors: [String: String] = [:]
     public private(set) var batchErrors: [String: String] = [:]
     private var batchEngines: [any BatchTranscriber] = []
     private var chosenLocales: [Locale] = []
-    private var batchBuffers: [String: BatchAudioBuffer] = [:]
     private var forwardingTask: Task<Void, Never>?
 
-    private var lanes: [SpeechLane] = []
-    private var mixedTranscript = MixedLanguageTranscript()
-    private var displayIndex = 0
+    private var processor: SpeechTranscriptProcessor?
+    private var modules: [SpeechTranscriber] = []
+    private var sessionID = UUID()
+    private var publishedRevision = 0
     private var analyzer: SpeechAnalyzer?
     private var contextualStrings: [String] = []
     private var input: AsyncStream<AnalyzerInput>.Continuation?
-    private var resultsTasks: [Task<Void, Never>] = []
+    private var resultsTasks: [Int: Task<Void, Never>] = [:]
+    private var moduleLocales: [Locale] = []
 
     private let recoveryRoot: URL
     public init(recoveryRoot: URL = RetainedDictation.root) { self.recoveryRoot = recoveryRoot }
+
+    deinit {
+        input?.finish()
+        forwardingTask?.cancel()
+        resultsTasks.values.forEach { $0.cancel() }
+        let analyzer = analyzer
+        let processor = processor
+        let audioStore = audioStore
+        Task { await processor?.cancel(); await audioStore?.close(); await analyzer?.cancelAndFinishNow() }
+    }
 
     /// Speech-supported equivalents of `locales`, deduplicated, in order.
     public static func resolve(_ locales: [Locale]) async -> [Locale] {
@@ -84,17 +105,42 @@ public final class LiveTranscriber {
     /// languages and fails analysis beyond that, so languages the user no longer dictates
     /// in are released first.
     public static func setLanguages(_ locales: [Locale], progress: ((Double?) -> Void)? = nil) async throws {
-        let keep = Set(await resolve(locales).map(\.identifier))
-        for reserved in await AssetInventory.reservedLocales where !keep.contains(reserved.identifier) {
+        let supported = await resolve(locales)
+        let keep = Set((locales + supported).map(BatchRouting.languageCode))
+        for reserved in await AssetInventory.reservedLocales where !keep.contains(BatchRouting.languageCode(reserved)) {
             _ = await AssetInventory.release(reservedLocale: reserved)
         }
-        if !keep.isEmpty { try await prepareAssets(locales: locales, progress: progress) }
+        if !supported.isEmpty { try await prepareAssets(locales: locales, progress: progress) }
     }
 
     /// Downloads speech models the OS doesn't have yet. Call early (e.g. at launch) so the
     /// first dictation doesn't stall on a download.
     public static func prepareAssets(locales: [Locale], progress: ((Double?) -> Void)? = nil) async throws {
         _ = try await makeModules(locales: locales, progress: progress)
+    }
+
+    /// Loads the speech models for `locales` into memory ahead of the first utterance, so
+    /// `start` doesn't pay for it while the user is already talking. Never downloads:
+    /// assets that aren't installed are left for the explicit language flow.
+    public static func prewarm(locales: [Locale]) async {
+        let supported = await resolve(locales)
+        guard !supported.isEmpty else { return }
+        let modules = supported.map {
+            SpeechTranscriber(locale: $0, transcriptionOptions: [],
+                              reportingOptions: [.volatileResults, .fastResults],
+                              attributeOptions: [.transcriptionConfidence, .audioTimeRange])
+        }
+        let status = await AssetInventory.status(forModules: modules)
+        let installed = await SpeechTranscriber.installedLocales
+        let ready = supported.map {
+            SpeechAssetPreparation.isReady(locale: $0, statusBefore: status, statusAfter: status,
+                                           installedLocales: installed)
+        }
+        guard ready.allSatisfy({ $0 }),
+              let format = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: modules) else { return }
+        let analyzer = SpeechAnalyzer(modules: modules)
+        try? await analyzer.prepareToAnalyze(in: format)
+        await analyzer.cancelAndFinishNow()
     }
 
     /// Starts analysis and returns the audio format the analyzer wants, plus the sink to
@@ -114,7 +160,6 @@ public final class LiveTranscriber {
         appleErrors = [:]
         chosenLocales = locales
         self.batchEngines = []
-        batchBuffers = [:]
         var seen = Set<String>()
         for engine in batchEngines where !BatchRouting.matching(locales, supportedBy: engine.languages).isEmpty {
             if seen.insert(engine.id).inserted, await engine.isAvailable() { self.batchEngines.append(engine) }
@@ -127,7 +172,7 @@ public final class LiveTranscriber {
             // Some OS releases advertise a locale before its asset is distributable.
             // A failed Apple lane must not prevent an installed batch engine from working.
             for locale in appleLocales {
-                do { pairs += try await Self.makeModules(locales: [locale], progress: onAssetProgress) }
+                do { pairs += try await Self.makeModules(locales: [locale], enabledLocales: locales, progress: onAssetProgress) }
                 catch {
                     guard self.batchEngines.contains(where: {
                         !BatchRouting.matching([locale], supportedBy: $0.languages).isEmpty
@@ -145,51 +190,44 @@ public final class LiveTranscriber {
         } else if let appleFormat = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: modules) {
             format = appleFormat
         } else { throw ScribeError.noAudioFormat }
-        for engine in self.batchEngines {
-            batchBuffers[engine.id] = try BatchAudioBuffer(inputFormat: format, sampleRate: engine.sampleRate)
-        }
-
-        lanes = pairs.map { SpeechLane(locale: $0.locale) }
-        displayIndex = lanes.firstIndex { $0.locale.identifier == displayLocale?.identifier } ?? 0
-        mixedTranscript = MixedLanguageTranscript(displayIndex: displayIndex)
-
+        let displayIndex = pairs.firstIndex { $0.locale.identifier == displayLocale?.identifier } ?? 0
+        let sessionID = UUID()
+        self.sessionID = sessionID
+        publishedRevision = 0
+        self.modules = modules
+        moduleLocales = pairs.map(\.locale)
         let (stream, input) = AsyncStream.makeStream(of: AnalyzerInput.self)
+        let (forwarded, sink) = AsyncStream.makeStream(of: AnalyzerInput.self)
         let analyzer = modules.isEmpty ? nil : SpeechAnalyzer(modules: modules)
-        self.analyzer = analyzer
-        self.input = input
-
-        resultsTasks = modules.enumerated().map { index, module in
-            Task { [weak self] in
-                do {
-                    for try await result in module.results {
-                        self?.apply(result, to: index)
-                    }
-                } catch {
-                    // The analyzer ending early just means we keep whatever text we have.
-                }
-            }
-        }
-
-        if !contextualStrings.isEmpty, let analyzer { try? await applyContext(to: analyzer) }
         let take = try RetainedDictation(root: recoveryRoot, languages: locales.map(\.identifier))
         retainedTake = take
-        audioFile = try AVAudioFile(forWriting: take.file, settings: format.settings, commonFormat: format.commonFormat, interleaved: format.isInterleaved)
+        let store = try SpeechAudioStore(url: take.file, format: format, engines: self.batchEngines, retainedSeconds: modules.count > 1 ? 30 : 0,
+                                         sink: analyzer == nil ? nil : sink)
+        audioStore = store
         audioLength = 0
-        let (forwarded, sink) = AsyncStream.makeStream(of: AnalyzerInput.self)
-        forwardingTask = Task { [weak self] in
+        let processor = SpeechTranscriptProcessor(locales: moduleLocales, displayIndex: displayIndex,
+                                                   measure: onPerformanceSample,
+                                                   clip: { try await store.clip(start: $0, end: $1) },
+                                                   switchLane: { [weak self] index, generation, start in
+            await self?.relock(to: index, generation: generation, from: start, sessionID: sessionID) ?? false
+        }, update: { [weak self] snapshot in
+            guard let self, self.sessionID == sessionID else { return }
+            self.publish(snapshot)
+        })
+        self.processor = processor
+        await processor.setContext(contextualStrings)
+        self.analyzer = analyzer
+        self.input = input
+        resultsTasks = Dictionary(uniqueKeysWithValues: modules.enumerated().map { index, module in
+            (index, resultTask(module, index: index, generation: 0, processor: processor, sessionID: sessionID))
+        })
+        if !contextualStrings.isEmpty, let analyzer { try? await applyContext(to: analyzer) }
+        forwardingTask = Task.detached {
             for await packet in stream {
-                guard !Task.isCancelled, let self else { break }
-                do { try self.audioFile?.write(from: packet.buffer) }
-                catch { self.batchErrors["recovery"] = "Couldn't save the recording." }
-                self.audioLength += Double(packet.buffer.frameLength) / packet.buffer.format.sampleRate
-                for engine in self.batchEngines where self.batchErrors[engine.id] == nil {
-                    do { try self.batchBuffers[engine.id]?.append(packet.buffer) }
-                    catch { self.batchErrors[engine.id] = error.localizedDescription }
-                }
-                if analyzer != nil { sink.yield(packet) }
+                guard !Task.isCancelled else { break }
+                await store.append(packet)
             }
-            self?.audioFile = nil
-            sink.finish()
+            await store.close()
         }
         try await analyzer?.start(inputSequence: forwarded)
         return (format, input)
@@ -199,6 +237,7 @@ public final class LiveTranscriber {
     /// Context belongs to this utterance and is never shared with the next analyzer.
     public func setContext(contextualStrings: [String]) async throws {
         self.contextualStrings = contextualStrings
+        await processor?.setContext(contextualStrings)
         if let analyzer { try await applyContext(to: analyzer) }
     }
 
@@ -210,17 +249,20 @@ public final class LiveTranscriber {
 
     /// Flushes remaining audio and returns the best transcript and the language it's in.
     public func finish(keepingAudioUntilDelivery: Bool = false) async -> (text: String, locale: Locale?) {
+        await processor?.endInput()
         input?.finish()
         input = nil
         await forwardingTask?.value
-        audioFile = nil
+        audioLength = await audioStore?.duration ?? 0
         if audioLength == 0 { discardRetainedTake() }
         let result = await FinishDeadline.wait(seconds: FinishDeadline.seconds(audioLength: audioLength)) {
             await self.finalize()
         } fallback: {
+            if let snapshot = self.processor?.latestSnapshot { self.publish(snapshot) }
             let analyzer = self.analyzer
-            self.resultsTasks.forEach { $0.cancel() }
-            Task { await analyzer?.cancelAndFinishNow() }
+            self.resultsTasks.values.forEach { $0.cancel() }
+            let processor = self.processor
+            Task { await processor?.cancel(); await analyzer?.cancelAndFinishNow() }
             return (self.text, Optional<Locale>.none)
         }
         let delivered = result.0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !text.isEmpty ? (text, Optional<Locale>.none) : result
@@ -239,64 +281,130 @@ public final class LiveTranscriber {
         input = nil
         await forwardingTask?.value
         forwardingTask = nil
-        try? await analyzer?.finalizeAndFinishThroughEndOfInput()
-        for task in resultsTasks { await task.value }
-        analyzer = nil
-        resultsTasks = []
-
-        var batchCandidates: [LanguagePicker.Candidate] = []
-        for engine in batchEngines where batchErrors[engine.id] == nil {
-            do {
-                guard let buffer = batchBuffers[engine.id] else { continue }
-                try buffer.finish()
-                let result = try await engine.transcribe(samples: buffer.samples, sampleRate: engine.sampleRate)
-                let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
-                if let locale = BatchRouting.detectedLocale(
-                    for: text, among: BatchRouting.matching(chosenLocales, supportedBy: engine.languages)
-                ) {
-                    batchCandidates.append(.init(locale: locale, text: text, confidence: result.confidence ?? 0.5))
-                }
-            } catch { batchErrors[engine.id] = error.localizedDescription }
+        while let current = analyzer {
+            try? await current.finalizeAndFinishThroughEndOfInput()
+            for task in resultsTasks.values { await task.value }
+            if analyzer === current { analyzer = nil; break }
         }
-        batchBuffers = [:]
+        modules = []
+        resultsTasks = [:]
+        let batchCandidates = await audioStore?.batchCandidates(locales: chosenLocales) ?? []
+        batchErrors.merge(await audioStore?.captureErrors ?? [:]) { _, latest in latest }
         guard !Task.isCancelled else { return (text, nil) }
-        guard let best = MixedLanguageTranscript.finalSelection(lanes: lanes, batch: batchCandidates) else {
-            return ("", nil)
-        }
+        guard let best = await processor?.finish(batch: batchCandidates) else { return ("", nil) }
         return (best.text, best.locale)
     }
 
     public func cancel() async {
+        sessionID = UUID()
+        await processor?.cancel()
+        processor = nil
+        modules = []
         input?.finish()
         input = nil
         forwardingTask?.cancel()
         await forwardingTask?.value
         forwardingTask = nil
-        audioFile = nil
+        audioLength = await audioStore?.duration ?? 0
+        await audioStore?.discardCache()
         if audioLength == 0 { discardRetainedTake() }
-        batchBuffers = [:]
         batchEngines = []
         await analyzer?.cancelAndFinishNow()
-        resultsTasks.forEach { $0.cancel() }
+        resultsTasks.values.forEach { $0.cancel() }
         analyzer = nil
-        resultsTasks = []
+        resultsTasks = [:]
     }
 
-    private func apply(_ result: SpeechTranscriber.Result, to index: Int) {
-        lanes[index].apply(result.text, isFinal: result.isFinal)
-        if lanes.count == 1 {
-            text = lanes[index].text
-            volatileText = lanes[index].volatile
-        } else {
-            text = mixedTranscript.select(lanes, live: true)?.text ?? lanes[displayIndex].text
-            volatileText = mixedTranscript.volatileText
+    private func lockModules(to index: Int, sessionID: UUID) async {
+        guard self.sessionID == sessionID, modules.indices.contains(index), let analyzer else { return }
+        let start = ContinuousClock.now
+        do {
+            try await analyzer.setModules([modules[index]])
+            guard self.sessionID == sessionID else { return }
+            for (other, task) in resultsTasks where other != index { task.cancel() }
+            modules = []
+            let active = await analyzer.modules.count
+            measure("activeLanes_\(active)", since: start, audioEnd: await audioStore?.duration ?? 0)
+        } catch {
+            // Ignored results cannot delay the HUD if the OS rejects module removal.
+            measure("moduleRemovalFailed", since: start, audioEnd: audioLength)
         }
+    }
+
+    private func resultTask(_ module: SpeechTranscriber, index: Int, generation: Int,
+                            processor: SpeechTranscriptProcessor, sessionID: UUID) -> Task<Void, Never> {
+        Task.detached { [weak self] in
+            do {
+                for try await result in module.results {
+                    try Task.checkCancellation()
+                    let event = SpeechTranscriptProcessor.Event(text: result.text, isFinal: result.isFinal,
+                        start: result.range.start.seconds, end: result.range.end.seconds, index: index, generation: generation)
+                    if let locked = await processor.apply(event) { await self?.lockModules(to: locked, sessionID: sessionID) }
+                }
+            } catch {
+                guard !Task.isCancelled else { return }
+                await self?.recognitionFailed(error, index: index, sessionID: sessionID)
+            }
+        }
+    }
+
+    private func recognitionFailed(_ error: any Error, index: Int, sessionID: UUID) {
+        guard self.sessionID == sessionID, moduleLocales.indices.contains(index) else { return }
+        appleErrors[moduleLocales[index].identifier] = error.localizedDescription
+        let failure = error as NSError
+        measure("resultError_\(failure.domain)_\(failure.code)", since: .now, audioEnd: audioLength)
+    }
+
+    private func relock(to index: Int, generation: Int, from start: Double, sessionID: UUID) async -> Bool {
+        guard self.sessionID == sessionID, moduleLocales.indices.contains(index), let store = audioStore,
+              let processor else { return false }
+        let module = SpeechTranscriber(locale: moduleLocales[index], transcriptionOptions: [],
+                                       reportingOptions: [.volatileResults, .fastResults],
+                                       attributeOptions: [.transcriptionConfidence, .audioTimeRange])
+        let replacement = SpeechAnalyzer(modules: [module])
+        let (stream, sink) = AsyncStream.makeStream(of: AnalyzerInput.self)
+        let task = resultTask(module, index: index, generation: generation, processor: processor, sessionID: sessionID)
+        do {
+            if !contextualStrings.isEmpty { try await applyContext(to: replacement) }
+            try await replacement.start(inputSequence: stream)
+            guard self.sessionID == sessionID else { throw CancellationError() }
+            try await store.replaceSink(sink, from: start)
+            let previous = analyzer
+            resultsTasks.values.forEach { $0.cancel() }
+            resultsTasks = [index: task]
+            modules = []
+            analyzer = replacement
+            Task { await previous?.cancelAndFinishNow() }
+            return true
+        } catch {
+            sink.finish()
+            task.cancel()
+            await replacement.cancelAndFinishNow()
+            return false
+        }
+    }
+
+    private func publish(_ snapshot: SpeechTranscriptProcessor.Snapshot) {
+        guard snapshot.revision > publishedRevision else { return }
+        publishedRevision = snapshot.revision
+        guard text != snapshot.text || volatileText != snapshot.volatileText else { return }
+        let start = ContinuousClock.now
+        text = snapshot.text
+        volatileText = snapshot.volatileText
         onUpdate?(text)
+        measure("publish", since: start, audioEnd: snapshot.audioEnd)
+    }
+
+    private func measure(_ phase: String, since start: ContinuousClock.Instant, audioEnd: Double) {
+        let elapsed = start.duration(to: .now).components
+        onPerformanceSample?(.init(phase: phase, audioEnd: audioEnd,
+                                  milliseconds: Double(elapsed.seconds) * 1000 + Double(elapsed.attoseconds) / 1e15,
+                                  onMainThread: Thread.isMainThread))
     }
 
     /// Whitespace/punctuation-only runs can lack timing; keep them attached to the
     /// preceding timed token. Missing timing on actual words disables mixing safely.
-    nonisolated static func timedTokens(_ text: AttributedString) -> (tokens: [SpeechToken], complete: Bool) {
+    nonisolated static func timedTokens(_ text: AttributedString, countWords: Bool = true) -> (tokens: [SpeechToken], complete: Bool) {
         var tokens: [SpeechToken] = []
         var complete = true
         var prefix = ""
@@ -306,25 +414,56 @@ public final class LiveTranscriber {
                range.start.seconds.isFinite, range.end.seconds.isFinite,
                range.duration.seconds >= 0 {
                 tokens.append(.init(text: prefix + value, start: range.start.seconds,
-                                    end: range.end.seconds, confidence: run.transcriptionConfidence ?? 0))
+                                    end: range.end.seconds, confidence: run.transcriptionConfidence ?? 0, words: countWords ? nil : 0))
                 prefix = ""
             } else if value.unicodeScalars.contains(where: { CharacterSet.letters.union(.decimalDigits).contains($0) }) {
                 complete = false
             } else if let last = tokens.popLast() {
-                tokens.append(.init(text: last.text + value, start: last.start, end: last.end, confidence: last.confidence))
+                tokens.append(.init(text: last.text + value, start: last.start, end: last.end, confidence: last.confidence, words: countWords ? nil : 0))
             } else { prefix += value }
         }
         return (tokens, complete)
     }
 
     nonisolated static func join(_ head: String, _ tail: String) -> String {
-        guard !head.isEmpty, let first = tail.first, !first.isWhitespace, !(head.last?.isWhitespace ?? false) else {
-            return head + tail
-        }
-        return head + " " + tail
+        var result = head
+        append(tail, to: &result)
+        return result
     }
 
-    private static func makeModules(locales: [Locale], progress: ((Double?) -> Void)? = nil) async throws -> [(locale: Locale, module: SpeechTranscriber)] {
+    nonisolated static func append(_ tail: String, to head: inout String) {
+        let tail = removingSharedPunctuation(tail, after: head)
+        if !head.isEmpty, let first = tail.first, !first.isWhitespace,
+           !boundaryPunctuation.contains(first), !(head.last?.isWhitespace ?? false) {
+            head.append(" ")
+        }
+        head.append(tail)
+    }
+
+    nonisolated private static let boundaryPunctuation = ",.!?;:，。！？、；：)]}'’”\""
+
+    /// Untimed punctuation can belong to the next word in the live lane but the
+    /// previous word in a padded replay. Remove only their shared punctuation edge;
+    /// repeated words and punctuation inside either fragment remain verbatim.
+    nonisolated private static func removingSharedPunctuation(_ tail: String, after head: String) -> String {
+        let content = tail.drop(while: \.isWhitespace)
+        let leading = Array(content.prefix { boundaryPunctuation.contains($0) })
+        guard !leading.isEmpty else { return tail }
+        let trailing = Array(head.reversed().drop(while: \.isWhitespace)
+            .prefix { boundaryPunctuation.contains($0) }).reversed()
+        for count in stride(from: min(leading.count, trailing.count), through: 1, by: -1) {
+            let matches = zip(trailing.suffix(count), leading.prefix(count)).allSatisfy { left, right in
+                left == right || ("'’".contains(left) && "'’".contains(right))
+            }
+            if matches {
+                let remainder = content.dropFirst(count)
+                return String(head.last?.isWhitespace == true ? remainder.drop(while: \.isWhitespace) : remainder)
+            }
+        }
+        return tail
+    }
+
+    private static func makeModules(locales: [Locale], enabledLocales: [Locale]? = nil, progress: ((Double?) -> Void)? = nil) async throws -> [(locale: Locale, module: SpeechTranscriber)] {
         let supported = await resolve(locales)
         guard !supported.isEmpty else {
             throw ScribeError.unsupportedLocale(locales.first ?? .current)
@@ -337,18 +476,9 @@ public final class LiveTranscriber {
                 attributeOptions: [.transcriptionConfidence, .audioTimeRange]
             ))
         }
-        let modules = pairs.map(\.module)
-        if await AssetInventory.status(forModules: modules) != .installed,
-           let request = try await AssetInventory.assetInstallationRequest(supporting: modules) {
-            progress?(0)
-            let observer = Task {
-                while !Task.isCancelled {
-                    progress?(request.progress.fractionCompleted)
-                    do { try await Task.sleep(for: .milliseconds(200)) } catch { return }
-                }
-            }
-            defer { observer.cancel(); progress?(nil) }
-            try await request.downloadAndInstall()
+        for pair in pairs {
+            try await SpeechAssetPreparation.prepare(module: pair.module, locale: pair.locale,
+                                                     enabledLocales: enabledLocales ?? locales, progress: { progress?($0) })
         }
         return pairs
     }

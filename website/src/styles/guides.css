@@ -1,0 +1,28 @@
+/* Guides reuse the docs' navy cards and on-page list, and the site's download band. */
+.guide-index { padding-bottom: 96px; }
+.guide-topic + .guide-topic { margin-top: 56px; }
+.guide-topic h2, .guide-more-title { font-size: 1.5rem; letter-spacing: -.01em; }
+.guide-cards { margin-top: 20px; }
+.guide-cards h3 { font-size: 1.15rem; line-height: 1.35; }
+.guide-cards h3 a { color: var(--text); text-decoration: none; }
+.guide-cards h3 a:hover { color: var(--sky); }
+.guide-cards p { margin: 10px 0 0; color: var(--text-2); font-size: .95rem; }
+.guide-shell { max-width: 1120px; padding-top: 40px; padding-bottom: 56px; }
+.guide-breadcrumbs { display: flex; gap: 12px; margin-bottom: 28px; font-size: .95rem; color: var(--text-3); }
+.guide-breadcrumbs a { text-underline-offset: 3px; }
+.guide-reading { display: grid; grid-template-columns: minmax(0, 1fr) 228px; gap: 56px; align-items: start; }
+.guide-reading .docs-toc { max-height: calc(100vh - 100px); overflow: auto; }
+.guide-more { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+/* Keep the Markdown download and reference links, with the CTA carrying visual weight. */
+.guide-reading .docs-article h2#try-it { margin-top: 2rem; font-size: 1.15rem; }
+@media (max-width: 1100px) {
+  .guide-reading { grid-template-columns: minmax(0, 1fr) 196px; gap: 40px; }
+  .guide-reading .docs-toc { display: block; }
+}
+@media (max-width: 768px) {
+  .guide-shell { padding-top: 20px; }
+  .guide-reading { display: block; }
+  .guide-reading .docs-toc { display: none; }
+  .guide-topic + .guide-topic { margin-top: 40px; }
+  .guide-more { grid-template-columns: 1fr; }
+}

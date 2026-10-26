@@ -21,10 +21,15 @@ import Synchronization
         }
         guard CommandLine.arguments.count >= 3 else {
             print("Usage: speech-e2e clip.aiff en_GB,nl_NL [--parakeet] [--live] [--realtime] [--microphone] [--reference-file text.txt] [--dictionary vocabulary.json] [--assert-live-cadence-ms 300] [--dictation-transcriber] [--no-replacement]")
+            print("       speech-e2e clip.wav en_US,it_IT --performance [--realtime] [--runs 3] [--inspect-seconds 20]")
             print("       speech-e2e --bias-matrix [--realtime] [--custom-lm]"); return
         }
         let url = URL(filePath: CommandLine.arguments[1])
         let locales = CommandLine.arguments[2].split(separator: ",").map { Locale(identifier: String($0)) }
+        if CommandLine.arguments.contains("--performance") {
+            try await PerformanceRun.run(clip: url, locales: locales)
+            return
+        }
         let store = ModelStore()
         let engines: [any BatchTranscriber] = CommandLine.arguments.contains("--parakeet")
             ? [ParakeetTranscriber(modelDirectory: store.directory(for: ModelCatalog.parakeet))] : []

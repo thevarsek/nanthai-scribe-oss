@@ -14,12 +14,14 @@ const mime={'.html':'text/html','.css':'text/css','.js':'text/javascript','.svg'
 async function files(dir,prefix='') { const result=[];for(const entry of await readdir(dir,{withFileTypes:true})){const name=join(prefix,entry.name);if(entry.isDirectory())result.push(...await files(join(dir,entry.name),name));else result.push(name);}return result; }
 const all=await files(dist);
 const routes=all.filter(f=>f.endsWith('.html')).map(f=>'/'+f.replace(/index\.html$/,'').replace(/\.html$/,'')).sort();
+const guideRoutes=routes.filter(route=>route.startsWith('/guides/'));
 // The DMG is published by the release script, not fabricated by website QA.
 const config=await readFile(join(project,'src/lib/site.ts'),'utf8');
 const macDownload=config.match(/downloads:\s*\{\s*mac:\s*"([^"]+)"/)?.[1];
 assert.equal(macDownload,'/download/NanthAi-Scribe.dmg');
 // Before launch every store button is a disabled "Coming soon" with no href.
-const launched=/launched:\s*true/.test(config);
+const launchedMac=/mac:\s*true/.test(config.match(/launched:\s*\{[^}]*\}/)[0]);
+const launchedPhone=/iphone:\s*true/.test(config.match(/launched:\s*\{[^}]*\}/)[0]);
 const server=createServer(async(req,res)=>{
  try{
   const pathname=decodeURIComponent(new URL(req.url,'http://localhost').pathname);
@@ -55,14 +57,41 @@ try{
    const metadata=await page.evaluate(()=>({title:document.title,desc:document.querySelector('meta[name="description"]')?.content,og:document.querySelector('meta[property="og:title"]')?.content,canonical:document.querySelector('link[rel="canonical"]')?.href}));
    if(!metadata.title||!metadata.desc||!metadata.og||!metadata.canonical)failures.push(`${route}: missing SEO metadata`);
    if(metadata.canonical!=='https://scribe.nanthai.tech'+route)failures.push(`${route}: canonical ${metadata.canonical}`);
+   if(guideRoutes.includes(route)){
+    const scripts=page.locator('head script[type="application/ld+json"]');
+    assert.equal(await scripts.count(),2,`${route}: Article and BreadcrumbList in the head`);
+    const data=await scripts.evaluateAll(nodes=>nodes.map(node=>JSON.parse(node.textContent)));
+    const article=data.find(item=>item['@type']==='Article');
+    const breadcrumbs=data.find(item=>item['@type']==='BreadcrumbList');
+    assert.deepEqual(breadcrumbs.itemListElement.map(item=>[item.position,item.name,item.item]),[
+     [1,'Home','https://scribe.nanthai.tech'],[2,'Guides','https://scribe.nanthai.tech/guides'],[3,await page.locator('h1').textContent(),metadata.canonical],
+    ]);
+    const headings=await page.locator('article h2').evaluateAll(nodes=>nodes.map(node=>'#'+node.id));
+    assert.deepEqual(await page.locator('.docs-toc a').evaluateAll(nodes=>nodes.map(node=>node.getAttribute('href'))),headings);
+    assert.equal(await page.locator('.docs-toc').isVisible(),width>768);
+    assert.equal(await page.locator('.guide-more a').count(),3);
+    assert(!await page.locator(`.guide-more a[href="${route}"]`).count());
+    assert.equal(await page.getByRole('link',{name:'Download for Mac',exact:true}).count(),launchedMac?1:0);
+    assert.equal(article['@type'],'Article');assert.equal(article['@context'],'https://schema.org');
+    assert.equal(article.headline,await page.locator('h1').textContent());
+    assert.equal(article.description,metadata.desc);assert.equal(article.publisher.name,'NanthAi');
+    assert.equal(article.mainEntityOfPage,metadata.canonical);
+    assert.equal(article.dateModified,await page.locator('time').getAttribute('datetime'));
+    assert.match(article.dateModified,/^\d{4}-\d{2}-\d{2}$/);
+    assert.equal(await page.locator('meta[property="og:type"]').getAttribute('content'),'article');
+    assert.equal(await page.locator('a[href*="apps.apple.com"]').count(),0,'No unreleased iPhone store link');
+   }
+   assert.deepEqual(await page.locator('.nav-list a').allTextContents(),['How it works','Features','Docs','Guides']);
    const macButtons=page.getByRole('link',{name:'Download for Mac',exact:true});
    const soonButtons=page.locator('.btn[aria-disabled="true"]');
    if(route==='/'||route==='/download'){
-    assert.equal(await macButtons.count(),launched?(route==='/'?2:1):0);
-    assert.equal(await soonButtons.count(),launched?0:(route==='/'?5:3));
+    const macSlots=route==='/'?2:1,phoneSlots=route==='/'?2:1,header=launchedMac||launchedPhone?0:1;
+    assert.equal(await macButtons.count(),launchedMac?macSlots:0);
+    assert.equal(await soonButtons.count(),header+(launchedMac?0:macSlots)+(launchedPhone?0:phoneSlots));
    }
    for(const button of await soonButtons.all()){assert.equal(await button.textContent(),'Coming soon');assert.equal(await button.getAttribute('href'),null);}
-   if(!launched)assert.equal(await page.getByRole('link',{name:/Download (for Mac|on the App Store)/}).count(),0);
+   if(!launchedMac)assert.equal(await page.getByRole('link',{name:'Download for Mac',exact:true}).count(),0);
+   if(!launchedPhone)assert.equal(await page.getByRole('link',{name:'Download on the App Store'}).count(),0);
    for(const button of await macButtons.all()){
     assert.equal(await button.getAttribute('href'),macDownload);
     assert.equal(await button.locator('..').locator('p').textContent(),'macOS 26 · Apple silicon');
@@ -157,7 +186,7 @@ try{
   const doc=new DOMParser().parseFromString(xml,'application/xml');
   return {errors:doc.querySelectorAll('parsererror').length,root:doc.documentElement.tagName,version:doc.documentElement.getAttribute('version'),channels:doc.querySelectorAll('rss > channel').length,items:doc.querySelectorAll('item').length,sparkle:doc.documentElement.lookupNamespaceURI('sparkle'),title:doc.querySelector('channel > title')?.textContent};
  },feed);
- assert.deepEqual(appcast,{errors:0,root:'rss',version:'2.0',channels:1,items:0,sparkle:'http://www.andymatuschak.org/xml-namespaces/sparkle',title:'NanthAi Scribe updates'});
+ assert.deepEqual(appcast,{errors:0,root:'rss',version:'2.0',channels:1,items:(feed.match(/<item>/g)||[]).length,sparkle:'http://www.andymatuschak.org/xml-namespaces/sparkle',title:'NanthAi Scribe updates'});
  // Reduced motion is a final frame on every illustrated scene, with stable geometry.
  await page.goto(base+'/how-it-works',{waitUntil:'networkidle'});
  await page.waitForFunction(()=>window.__scribeScenes);
@@ -231,14 +260,65 @@ try{
  assert(await page.locator('#docs-links').isHidden());await page.click('.docs-toggle');assert(await page.locator('#docs-links').isVisible());
  assert.equal(await page.locator('#docs-links a[aria-current="page"]').count(),1);
  const groupCount=await page.locator('#docs-links section').count();assert(groupCount>=9,`Docs groups: ${groupCount}`);
+ // A guide is discoverable from both indexes and every related doc declared in frontmatter.
+ await page.goto(base+'/docs',{waitUntil:'networkidle'});
+ await page.locator('main a[href="/guides"]').click();await page.waitForURL('**/guides');
+ assert.deepEqual((await page.locator('main a[href^="/guides/"]').evaluateAll(nodes=>nodes.map(n=>n.getAttribute('href')))).sort(),guideRoutes);
+ assert.deepEqual(await page.locator('.guide-topic h2').allTextContents(),['Dictation on Mac','iPhone','Meetings and notes','Languages and vocabulary','Comparisons']);
+ const guideLink=page.locator('main a[href^="/guides/"]').first();
+ const guidePath=await guideLink.getAttribute('href');await guideLink.click();await page.waitForURL('**'+guidePath);
+ const docLink=page.locator('article a[href^="/docs/"]').first();
+ const docPath=await docLink.getAttribute('href');await docLink.click();await page.waitForURL('**'+docPath);
+ await page.locator(`article a[href="${guidePath}"]`).click();await page.waitForURL('**'+guidePath);
+ let relatedCount=0;
+ for(const route of guideRoutes){
+  await page.goto(base+route,{waitUntil:'domcontentloaded'});
+  const currentMarkdown=await readFile(join(project,'src/content/guides/en',route.split('/').pop()+'.md'),'utf8');
+  const topic=currentMarkdown.match(/^topic: (.+)$/m)?.[1];
+  assert(topic,`${route}: topic set`);
+  const sameTopic=[];
+  for(const other of guideRoutes.filter(other=>other!==route)){
+   const text=await readFile(join(project,'src/content/guides/en',other.split('/').pop()+'.md'),'utf8');
+   if(text.match(/^topic: (.+)$/m)?.[1]===topic)sameTopic.push(other);
+  }
+  const more=await page.locator('.guide-more a').evaluateAll(nodes=>nodes.map(node=>node.getAttribute('href')));
+  assert.equal(more.filter(href=>sameTopic.includes(href)).length,Math.min(3,sameTopic.length),`${route}: topic matches before fallback`);
+  const slug=route.split('/').pop();
+  const markdown=await readFile(join(project,'src/content/guides/en',slug+'.md'),'utf8');
+  const related=markdown.match(/^related: \[([^\]]*)\]/m)?.[1].split(',').map(s=>s.trim());
+  assert(related?.length,`${route}: related docs declared`);
+  for(const doc of related){
+   assert(routes.includes('/docs/'+doc),`${route}: related doc ${doc} exists`);
+   await page.goto(base+'/docs/'+doc,{waitUntil:'domcontentloaded'});
+   const backlink=page.locator(`article a[href="${route}"]`);
+   assert.equal(await backlink.count(),1,`${doc}: backlink to ${route}`);
+   assert((await backlink.locator('..').textContent()).startsWith('Related guide: '));relatedCount++;
+  }
+ }
+ // Exercise the shared TOC and the added mobile header link.
+ await page.setViewportSize({width:1440,height:1000});await page.goto(base+'/guides/dictate-emails',{waitUntil:'networkidle'});
+ await page.locator('.docs-toc a').nth(1).click();
+ await page.waitForFunction(()=>location.hash&&document.querySelector('.docs-toc a.active')?.getAttribute('href')===location.hash);
+ await page.setViewportSize({width:390,height:1000});await page.goto(base+'/docs',{waitUntil:'networkidle'});
+ await page.getByRole('button',{name:'Open menu',exact:true}).click();
+ await page.locator('.nav-list a[href="/guides"]').click();await page.waitForURL('**/guides');
  // Capture complete, deterministic final frames for owner review.
  await page.emulateMedia({reducedMotion:'reduce'});await mkdir(shots,{recursive:true});
- for(const [route,width,name] of [['/',1440,'home-1440'],['/',390,'home-390'],['/',1440,'home-iphone-1440'],['/features',1440,'features-1440'],['/features',390,'features-390'],['/privacy',1440,'privacy-1440'],['/download',390,'download-390'],['/docs/getting-started-mac',1440,'docs-1440'],['/docs/getting-started-mac',390,'docs-390'],['/docs/getting-started-mac',1440,'docs-search-1440']]){
+ for(const [route,width,name] of [['/',1440,'home-1440'],['/',390,'home-390'],['/',1440,'home-iphone-1440'],['/features',1440,'features-1440'],['/features',390,'features-390'],['/privacy',1440,'privacy-1440'],['/download',390,'download-390'],['/docs/getting-started-mac',1440,'docs-1440'],['/docs/getting-started-mac',390,'docs-390'],['/docs/getting-started-mac',1440,'docs-search-1440'],['/guides',1440,'guides-1440'],['/guides',390,'guides-390'],['/guides/voice-notes-to-text-mac',1440,'guide-1440'],['/guides/voice-notes-to-text-mac',390,'guide-390']]){
   await page.setViewportSize({width,height:1000});await page.goto(base+route,{waitUntil:'networkidle'});await page.evaluate(()=>document.fonts.ready);
   if(route==='/'||route==='/features')await page.waitForFunction(()=>window.__scribeScenes);
   if(name.includes('iphone')){await page.locator('.handoff-stage').locator('..').screenshot({path:join(shots,name+'.png')});continue;}
   if(name.includes('search')){await page.fill('#docs-q','meeting');await page.waitForSelector('#docs-results [role="option"]');await page.screenshot({path:join(shots,name+'.png'),fullPage:false});continue;}
   await page.screenshot({path:join(shots,name+'.png'),fullPage:true});
+  if(name==='guide-1440'){
+   await page.locator('.final').screenshot({path:join(shots,'guide-cta-1440.png')});
+   await page.locator('.guide-more').locator('..').screenshot({path:join(shots,'more-guides-1440.png')});
+  }
+ }
+ for(const width of [1440,390]){
+  await page.setViewportSize({width,height:1000});await page.goto(base+'/guides',{waitUntil:'networkidle'});
+  if(width===390)await page.getByRole('button',{name:'Open menu',exact:true}).click();
+  await page.screenshot({path:join(shots,`header-${width}.png`),fullPage:false});
  }
  assert.equal(external.size,0,`External requests: ${[...external]}`);
  assert.equal(errors.size,0,`Browser errors: ${[...errors]}`);
@@ -248,9 +328,10 @@ try{
   console.log(`PASS accessibility: ${contrastCount} text contrast checks; AA contrast, landmarks, focus styles, docs navigation (${groupCount} groups, mobile panel).`);
   console.log(`PASS links and SEO: ${linkCount} local targets; metadata and sitemap; 0 broken links.`);
   console.log(`PASS motion: 22-second hero story, type-or-talk phone scene, 6 feature callouts, lazy scene imports, offscreen pause, ${revealTotal} scroll reveals in; reduced motion shows everything at once; CLS ≤ 0.01.`);
-  console.log(`PASS launch: ${launched?'download buttons link to the DMG and App Store':'every download button is a disabled "Coming soon" (site.launched=false)'}; canonical URLs on https://scribe.nanthai.tech; no changelog page, link or sitemap entry.`);
+  console.log(`PASS launch: Mac ${launchedMac?'links to the DMG':'is Coming soon'}, iPhone ${launchedPhone?'links to the App Store':'is Coming soon'}; canonical URLs on https://scribe.nanthai.tech; no changelog page, link or sitemap entry.`);
   console.log(`PASS docs search: ${indexSize} articles indexed at build time; title and heading hits, keyboard navigation, no requests.`);
+  console.log(`PASS guides: ${guideRoutes.length} Articles with Article + BreadcrumbList JSON-LD, H2 TOCs and topic-based related links; ${relatedCount} generated backlinks; docs → guides → article → doc → article navigation.`);
   console.log('PASS runtime: 0 external requests; 0 browser errors.');
-  console.log(`PASS screenshots: ${shots}/home-1440.png, home-390.png, home-iphone-1440.png, features-1440.png, features-390.png, privacy-1440.png, download-390.png, docs-1440.png, docs-390.png, docs-search-1440.png.`);
+  console.log(`PASS screenshots: ${shots}/home-1440.png, home-390.png, home-iphone-1440.png, features-1440.png, features-390.png, privacy-1440.png, download-390.png, docs-1440.png, docs-390.png, docs-search-1440.png, guides-1440.png, guides-390.png, guide-1440.png, guide-390.png, header-1440.png, header-390.png, guide-cta-1440.png, more-guides-1440.png.`);
  }
 }finally{await browser?.close();await new Promise(done=>server.close(done));}

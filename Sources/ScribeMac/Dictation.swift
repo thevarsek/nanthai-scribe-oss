@@ -48,7 +48,7 @@ final class Dictation {
             do {
                 let batch = models.isInstalled(ModelCatalog.parakeet)
                     ? ParakeetTranscriber(modelDirectory: models.directory(for: ModelCatalog.parakeet)) : nil
-                let text = TextCleanup.clean(try await take.transcribe(parakeet: batch), dictionary: dictionary)
+                let text = TextCleanup.clean(try await take.transcribe(parakeet: batch, enabledLocales: languages.map(Locale.init(identifier:))), dictionary: dictionary)
                 guard !text.isEmpty else { return }
                 record(text)
                 guard historyFailure == nil else { return }
@@ -218,7 +218,10 @@ final class Dictation {
         didSet { settings.soundsEnabled = soundsEnabled }
     }
     var engine: RewriteEngine {
-        didSet { settings.engine = engine }
+        didSet {
+            settings.engine = engine
+            if engine != oldValue { warmSpeechPath() }
+        }
     }
     var useScreenContext: Bool {
         didSet { settings.useScreenContext = useScreenContext }
@@ -239,6 +242,7 @@ final class Dictation {
     private(set) var packLanguages: [Locale] = []
     private var parakeet: ParakeetTranscriber?
     private var gemma: GemmaRewriter?
+    private var warmTask: Task<Void, Never>?
 
     private let pushToTalk = PushToTalk()
     private let defaults: UserDefaults
@@ -260,6 +264,9 @@ final class Dictation {
         var screenTerms: [String] = []
         var context = TextInserter.Context()
         var finishRequested = false
+        /// The transcriber is running and the microphone is feeding it.
+        var ready = false
+        let timing = CaptureTiming()
         var task: Task<Void, Never>?
         var rewriteDeadline: Task<Void, Never>?
         var screenTask: Task<Void, Never>?
@@ -308,7 +315,10 @@ final class Dictation {
         pushToTalk.onChange = { [weak self] shortcuts, action in
             guard let self else { return }
             self.shortcuts = shortcuts
-            if shortcuts.polish, let session = self.session { self.startCardIfNeeded(session) }
+            if shortcuts.polish, let session = self.session {
+                self.startCardIfNeeded(session)
+                self.warmRewriterIfNeeded()
+            }
             switch action {
             case .start: self.begin()
             case .finish: self.end()
@@ -354,7 +364,7 @@ final class Dictation {
             languages = chosen.prefix(Self.maxLanguages).map(\.identifier)
             defaults.set(languages, forKey: "languages")
         }
-        warmParakeetIfNeeded()
+        warmSpeechPath()
     }
 
     func isSelected(_ locale: Locale) -> Bool { languages.contains(locale.identifier) }
@@ -382,8 +392,8 @@ final class Dictation {
                 try await LiveTranscriber.setLanguages(locales) { [weak self] in self?.assetProgress = $0 }
                 languageError = nil
             } catch { languageError = "Couldn't prepare this language. Try again." }
+            warmSpeechPath()
         }
-        warmParakeetIfNeeded()
     }
 
     func retryLanguages() { setLanguages(languages) }
@@ -408,6 +418,37 @@ final class Dictation {
     private func warmParakeetIfNeeded() {
         guard let engine = parakeetEngine() else { return }
         Task.detached(priority: .utility) { _ = await engine.isAvailable() }
+    }
+
+    /// Warms what the first press would otherwise wait for: Apple's speech models, and the
+    /// Parakeet model only when a pack language is selected. Low priority, no microphone, no
+    /// downloads. The Gemma rewriter is not loaded here (several GB); see `warmRewriterIfNeeded`.
+    private func warmSpeechPath() {
+        warmParakeetIfNeeded()
+        let locales = languages.map(Locale.init(identifier:))
+        guard !locales.isEmpty else { return }
+        warmTask?.cancel()
+        warmTask = Task.detached(priority: .utility) {
+            let start = ContinuousClock.now
+            await LiveTranscriber.prewarm(locales: locales)
+            let ms = CaptureTiming.milliseconds(from: start, to: .now)
+            Logger(subsystem: "tech.nanthai.Scribe", category: "Latency")
+                .info("speech prewarm: \(ms, privacy: .public) ms")
+        }
+    }
+
+    /// A Refine press needs Gemma only after the user stops talking, so loading it while
+    /// they speak hides the cold load without keeping it resident for plain dictation.
+    private func warmRewriterIfNeeded() {
+        guard engine == .gemma, shortcuts.polish, models.isInstalled(ModelCatalog.gemma) else { return }
+        let rewriter = rewriter()
+        Task.detached(priority: .utility) {
+            let start = ContinuousClock.now
+            _ = await rewriter.isAvailable()
+            let ms = CaptureTiming.milliseconds(from: start, to: .now)
+            Logger(subsystem: "tech.nanthai.Scribe", category: "Latency")
+                .info("rewriter warm: \(ms, privacy: .public) ms")
+        }
     }
 
     func rewriter() -> any TextRewriter {
@@ -471,6 +512,7 @@ final class Dictation {
 
     private func begin() {
         guard phase == .idle || isFailed else { return }
+        let keyDown = ContinuousClock.now
         hideCorrection()
         correctionWatch.stop()
         errorTask?.cancel()
@@ -480,6 +522,8 @@ final class Dictation {
             overrides: appStyles.overrides(defaultTone: tone), defaultTone: tone)
         let session = Session(outputLanguage: outputLanguage, dictionary: dictionary,
                               app: appContext, tone: resolvedTone)
+        session.timing.keyDown = keyDown
+        warmRewriterIfNeeded()
         self.session = session
         selectedText = nil
         phase = .starting
@@ -490,19 +534,29 @@ final class Dictation {
         // Leave the event-tap callback before making AX or audio calls.
         session.task = Task { [weak self] in
             guard let self, self.session === session else { return }
-            try? await session.transcriber.setContext(contextualStrings:
-                DictionaryEntry.contextualStrings(in: session.dictionary))
-            guard self.session === session, !Task.isCancelled else { return }
-            if useScreenContext, let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier {
-                startScreenContext(session, processIdentifier: pid)
-            }
-            session.context = TextInserter.context(app: session.context)
-            selectedText = session.context.selection
             do {
-                guard await Microphone.requestAccess() else { throw ScribeError.microphoneDenied }
+                // Capture first: everything below can take seconds on a cold start, and the
+                // user is already talking. The audio waits in the microphone's pre-roll.
+                if !Microphone.accessGranted {
+                    guard await Microphone.requestAccess() else { throw ScribeError.microphoneDenied }
+                    guard self.session === session, !Task.isCancelled else { return }
+                }
+                try session.microphone.startCapture(onLevel: Self.levelCallback(self, session: session))
+                session.timing.mark(.micRunning)
+                phase = .listening
+                play("Tink")
+
+                try? await session.transcriber.setContext(contextualStrings:
+                    DictionaryEntry.contextualStrings(in: session.dictionary))
                 guard self.session === session, !Task.isCancelled else { return }
+                if useScreenContext, let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier {
+                    startScreenContext(session, processIdentifier: pid)
+                }
+                session.context = TextInserter.context(app: session.context)
+                selectedText = session.context.selection
                 session.transcriber.onUpdate = { [weak self, weak session] text in
                     guard let self, let session, self.session === session else { return }
+                    if !text.isEmpty { session.timing.mark(.firstResult) }
                     self.liveText = text
                     self.volatileText = session.transcriber.volatileText
                 }
@@ -518,8 +572,19 @@ final class Dictation {
                     await session.transcriber.cancel()
                     return
                 }
+                session.timing.mark(.transcriberReady)
+                // Released while the analyzer was starting: keep the pre-roll if it holds speech.
+                let spoke = session.microphone.bufferedSeconds >= 0.3 && session.microphone.peakLevel > 0.15
+                if session.finishRequested, spoke {
+                    session.microphone.attach(format: format, sink: sink)
+                    session.ready = true
+                    finish(session)
+                    return
+                }
                 if session.finishRequested {
-                    // A tap released before capture began has no audio to finalize.
+                    // A tap with no speech has no audio to finalize.
+                    session.microphone.stop()
+                    level = 0
                     await session.transcriber.cancel()
                     guard self.session === session else { return }
                     if SelectionRefine.request(speech: "", selection: session.context.selection, polish: shortcuts.polish) != nil {
@@ -527,10 +592,9 @@ final class Dictation {
                     } else { complete(session) }
                     return
                 }
-                try session.microphone.start(format: format, sink: sink,
-                                             onLevel: Self.levelCallback(self, session: session))
-                phase = .listening
-                play("Tink")
+                session.microphone.attach(format: format, sink: sink)
+                session.ready = true
+                if phase != .listening { phase = .listening }
             } catch {
                 guard self.session === session else { return }
                 fail(error)
@@ -547,6 +611,7 @@ final class Dictation {
         }
         switch phase {
         case .starting: session.finishRequested = true
+        case .listening where !session.ready: session.finishRequested = true
         case .listening: finish(session)
         default: break
         }
@@ -563,10 +628,11 @@ final class Dictation {
             guard let self else { return }
             let (raw, detected) = await session.transcriber.finish(keepingAudioUntilDelivery: true)
             guard self.session === session, !Task.isCancelled else { return }
-            session.dictionary += contacts.matches(in: raw).filter { contact in
+            // Contact names stay local to this take: never speech bias, never saved.
+            let dictionary = session.dictionary + contacts.matches(in: raw, languages: languages).filter { contact in
                 !session.dictionary.contains { $0.term.caseInsensitiveCompare(contact.term) == .orderedSame }
             }
-            let cleaned = TextCleanup.clean(raw, dictionary: session.dictionary)
+            let cleaned = TextCleanup.clean(raw, dictionary: dictionary)
             let snippets = self.snippets
             let exact = editing ? nil : Snippets.exactMatch(in: raw, snippets: snippets)
             let silentSelection = SelectionRefine.request(speech: cleaned, selection: session.context.selection, polish: polish)
@@ -609,12 +675,12 @@ final class Dictation {
                         // Edit follows its spoken instruction, including translations.
                         outputLanguage: editing ? nil : session.outputLanguage.map(Locale.init(identifier:)),
                         tone: session.tone,
-                        dictionaryTerms: DictionaryEntry.terms(in: session.dictionary)
+                        dictionaryTerms: DictionaryEntry.terms(in: dictionary)
                     )
                 )
                 do {
                     let rewritten = try await ChunkedRewriter(rewriter()).rewrite(request)
-                    text = DictionaryReplacement.apply(to: rewritten, dictionary: session.dictionary)
+                    text = DictionaryReplacement.apply(to: rewritten, dictionary: dictionary)
                 } catch {
                     rewriteError = error
                 }
@@ -771,7 +837,7 @@ final class Dictation {
     }
 
     private func smooth(_ new: Float) {
-        guard phase == .listening else { return }
+        guard phase == .listening || phase == .starting else { return }
         level += (new - level) * 0.4
     }
 

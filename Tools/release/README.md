@@ -38,9 +38,13 @@ Keep tools, archives and credentials outside tracked source (or under ignored `b
    against the local archive directory and writes/updates `website/public/appcast.xml`.
    It uses Sparkle's Keychain private key to produce the EdDSA signature. It does not upload
    anything. Keep previous DMGs in `build/appcast/` to retain previous entries/deltas.
-7. Review the XML enclosure URL, signature, versions and minimum macOS version. Separately
-   publish the matching DMG under `/downloads/` and the XML at
-   `https://scribe.nanthai.tech/appcast.xml` when the owner approves publishing.
+7. Review the XML enclosure URL, signature, versions and minimum macOS version. Then, with
+   the owner's go-ahead, `Tools/release/publish.sh build/NanthAi-Scribe-<version>.dmg` creates
+   the GitHub Release `v<version>` on the public repo (the DMG lives there, never in git or on
+   Netlify) and adds `website/public/_redirects` lines so
+   `https://scribe.nanthai.tech/downloads/<file>` (the appcast URL) and
+   `https://scribe.nanthai.tech/download/NanthAi-Scribe.dmg` (the site's button, always the
+   latest) redirect to it. Commit and push `website/public/` to publish the feed and redirects.
 
 Update checks are manual by default. `SUEnableAutomaticChecks=false` suppresses Sparkle's
 permission prompt; the General toggle writes Sparkle's persisted preference. Opting in

@@ -1,0 +1,24 @@
+---
+import Base from '@/layouts/Base.astro';
+import { loadGuides, groupGuides, pathOf } from '@/lib/guides';
+import '@/styles/docs.css';
+import '@/styles/guides.css';
+const groups = groupGuides(await loadGuides());
+---
+<Base title="Guides" description="Practical guides to dictation on Mac and iPhone, offline speech recognition, meeting transcription and editing dictated text with Scribe.">
+  <section class="band hero inner"><div class="container hero-copy">
+    <h1 class="display">Guides</h1>
+    <p class="lede">Dictation, meeting transcripts and editing by voice. For app settings and controls, see the <a href="/docs">docs</a>.</p>
+  </div></section>
+  <div class="container guide-index">
+    {groups.map(group => <section class="guide-topic" aria-labelledby={'topic-' + group.topic.toLowerCase().replaceAll(' ', '-')}>
+      <h2 id={'topic-' + group.topic.toLowerCase().replaceAll(' ', '-')}>{group.topic}</h2>
+      <ul class="docs-groups guide-cards">
+        {group.entries.map(guide => <li>
+          <h3><a href={pathOf(guide)}>{guide.data.title}</a></h3>
+          <p>{guide.data.description}</p>
+        </li>)}
+      </ul>
+    </section>)}
+  </div>
+</Base>

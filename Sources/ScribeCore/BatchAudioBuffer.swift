@@ -2,8 +2,7 @@ import AVFoundation
 import Foundation
 
 /// A persistent converter preserves resampling state across microphone buffers.
-/// Accessed only by LiveTranscriber's single input-forwarding task.
-@MainActor
+/// Owned by the audio-store actor; converter state never crosses executors.
 final class BatchAudioBuffer {
     private let converter: AVAudioConverter
     private let outputFormat: AVAudioFormat

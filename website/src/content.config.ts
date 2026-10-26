@@ -20,4 +20,16 @@ const docs = defineCollection({
   }),
 });
 
-export const collections = { docs };
+const guides = defineCollection({
+  loader: glob({ pattern: "**/*.md", base: "./src/content/guides" }),
+  schema: z.object({
+    title: z.string().max(60),
+    description: z.string().max(155),
+    keyword: z.string(),
+    topic: z.enum(["Dictation on Mac", "iPhone", "Meetings and notes", "Languages and vocabulary", "Comparisons"]).optional(),
+    updated: z.coerce.date(),
+    related: z.array(z.string()),
+  }),
+});
+
+export const collections = { docs, guides };

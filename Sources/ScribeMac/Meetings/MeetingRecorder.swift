@@ -160,9 +160,11 @@ final class MeetingRecorder {
         let session = MeetingCaptureSession(folder: store.directory(meeting.id), sources: makeSources())
         do {
             let apple = await LiveTranscriber.resolve(options.languages)
-            if !apple.isEmpty { try await LiveTranscriber.prepareAssets(locales: apple) { [weak self] in self?.assetProgress = $0 } }
+            if !apple.isEmpty { try await LiveTranscriber.prepareAssets(locales: options.languages) { [weak self] in self?.assetProgress = $0 } }
             if let first = options.languages.first, await !MeetingTranscriber.needsParakeet(first) {
-                try await MeetingTranscriber.validate(locale: first)
+                try await MeetingTranscriber.validate(locale: first, enabledLocales: options.languages) { [weak self] in
+                    self?.assetProgress = $0
+                }
             }
             try await store.save(meeting)
             try await session.start()
@@ -248,7 +250,9 @@ final class MeetingRecorder {
         let transcript: MeetingPipeline.Transcript
         do {
             transcript = try await MeetingPipeline.transcribe(segments, folder: folder, languages: options.languages,
-                parakeetDirectory: options.parakeet, diarizerDirectory: options.diarizer, progress: { [weak self] step, status in
+                parakeetDirectory: options.parakeet, diarizerDirectory: options.diarizer,
+                enabledLocales: defaults.stringArray(forKey: "languages")?.map(Locale.init(identifier:)) ?? options.languages,
+                progress: { [weak self] step, status in
                     await self?.setProgress(id, step: step, status: status)
                 })
         } catch {

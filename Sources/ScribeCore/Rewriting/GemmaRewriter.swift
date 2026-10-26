@@ -92,7 +92,7 @@ public actor GemmaRewriter: TextRewriter {
 
     /// Fail with a recoverable error instead of letting MLX abort when a SwiftPM-only
     /// executable has no compiled shaders. Mirrors MLX's documented bundle locations.
-    private static func prepareMetalLibrary() -> Bool {
+    public static func prepareMetalLibrary() -> Bool {
         if let library = GPU.metallib, FileManager.default.fileExists(atPath: library.path) { return true }
         let executable = Bundle.main.executableURL?.deletingLastPathComponent() ?? Bundle.main.bundleURL
         var roots = [Bundle.main.bundleURL, Bundle.main.resourceURL ?? executable, executable]

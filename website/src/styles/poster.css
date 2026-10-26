@@ -45,6 +45,9 @@ p { margin: 0 0 1em; }
 .cta-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; }
 .store-option { display: flex; flex-direction: column; gap: 8px; }
 .store-option p { margin: 0; }
+/* Apple's badge, unmodified: 54 px tall to match .btn.lg (Apple's minimum is 40), clear space is a quarter of its height. */
+.store-badge { display: inline-block; line-height: 0; margin: 0 13px 0 0; }
+.store-badge img { height: 54px; width: auto; }
 
 /* bands */
 .band { padding: clamp(64px, 9vw, 128px) 0; }
@@ -148,7 +151,7 @@ details p { padding: 0 0 20px; color: var(--text-2); max-width: 70ch; }
 .foot-grid a { color: var(--text-2); text-decoration: none; }
 .foot-grid a:hover { color: var(--text); }
 .foot-brand p { color: var(--text-2); max-width: 28ch; margin-top: 1rem; }
-.foot-bottom { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--line); color: var(--text-3); font-size: .85rem; }
+.foot-brand .foot-copy { color: var(--text-3); font-size: .85rem; margin-top: .5rem; }
 
 /* scenes */
 .scene { height: auto !important; }
